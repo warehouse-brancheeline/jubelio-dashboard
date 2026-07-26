@@ -1,20 +1,28 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
+  AlertCircle,
+  ArrowDownUp,
   Boxes,
-  ChevronDown,
+  CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
+  Download,
+  Eye,
   LayoutDashboard,
+  LoaderCircle,
+  LockKeyhole,
   LogOut,
+  Mail,
   PackageCheck,
   RefreshCw,
+  RotateCcw,
   Search,
-  SlidersHorizontal,
   ShoppingBag,
-  Sparkles,
+  SlidersHorizontal,
   Warehouse,
+  X,
 } from "lucide-react";
 import {
   Area,
@@ -27,426 +35,1129 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Session } from "@supabase/supabase-js";
-import { isConfigured, supabase } from "./supabase";
+import { useAuth, type AuthController } from "./hooks/useAuth";
+import { useDashboardData } from "./hooks/useDashboardData";
+import {
+  buildCsv,
+  businessDate,
+  defaultFilters,
+  downloadCsv,
+  formatBusinessDate,
+  formatCompactNumber,
+  formatCurrency,
+  formatDateTime,
+  formatNumber,
+  stockStatusLabel,
+} from "./lib/dashboard";
+import type {
+  DashboardFilters,
+  DataQuery,
+  OrderItem,
+  OrderRow,
+  SortDirection,
+  ViewName,
+} from "./types";
 
-type Order = {
-  order_id: number;
-  order_number: string | null;
-  order_date: string | null;
-  marketplace: string | null;
-  store_name: string | null;
-  customer_name: string | null;
-  status: string | null;
-  grand_total: number | null;
-};
+function useDebouncedValue<T>(value: T, delay = 350): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+  return debounced;
+}
 
-type Stock = {
-  item_id: number;
-  location_name: string | null;
-  quantity: number | null;
-  available_quantity: number | null;
-  products: { sku: string | null; name: string } | null;
-};
+function FullPageLoader() {
+  return (
+    <div className="full-page-state">
+      <LoaderCircle className="spin" size={32} />
+      <p>Memeriksa sesi aman…</p>
+    </div>
+  );
+}
 
-const rupiah = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  maximumFractionDigits: 0,
-});
-
-const compact = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 });
-
-const demoOrders: Order[] = [
-  { order_id: 1, order_number: "SO-206275", order_date: new Date().toISOString(), marketplace: "SHOPEE", store_name: "Branché Eline", customer_name: "Pelanggan", status: "COMPLETED", grand_total: 849000 },
-  { order_id: 2, order_number: "SO-206274", order_date: new Date(Date.now() - 86400000).toISOString(), marketplace: "TOKOPEDIA", store_name: "Branché Eline", customer_name: "Pelanggan", status: "COMPLETED", grand_total: 1275000 },
-  { order_id: 3, order_number: "SO-206273", order_date: new Date(Date.now() - 172800000).toISOString(), marketplace: "TIKTOK", store_name: "Branché Eline", customer_name: "Pelanggan", status: "COMPLETED", grand_total: 635000 },
-];
-
-function App() {
-  const [session, setSession] = useState<Session | null>(null);
+function AuthScreen({ auth }: { auth: AuthController }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
-    () => window.location.hash.includes("type=recovery"),
-  );
-  const [authError, setAuthError] = useState("");
-  const [authMessage, setAuthMessage] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [stocks, setStocks] = useState<Stock[]>([]);
-  const [query, setQuery] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [warehouseFilter, setWarehouseFilter] = useState("");
-  const [platformFilter, setPlatformFilter] = useState("");
-  const [storeFilter, setStoreFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [showRecoveryRequest, setShowRecoveryRequest] = useState(false);
 
-  useEffect(() => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-
-    async function initializeAuth() {
-      const hash = new URLSearchParams(window.location.hash.slice(1));
-      const accessToken = hash.get("access_token");
-      const refreshToken = hash.get("refresh_token");
-
-      if (accessToken && refreshToken) {
-        const { data, error } = await supabase!.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (error) {
-          setAuthError("Tautan pemulihan sudah kedaluwarsa. Kirim ulang email recovery.");
-        } else {
-          setSession(data.session);
-          setIsPasswordRecovery(true);
-        }
-      } else {
-        const { data } = await supabase!.auth.getSession();
-        setSession(data.session);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (auth.mode === "recovery") {
+      if (password !== confirmPassword) {
+        return;
       }
-      setLoading(false);
-    }
-
-    initializeAuth();
-    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      setSession(nextSession);
-      if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
-    });
-    return () => data.subscription.unsubscribe();
-  }, []);
-
-  async function loadData() {
-    if (!supabase || !session) return;
-    setRefreshing(true);
-    const [ordersResult, stockResult] = await Promise.all([
-      supabase.from("orders").select("order_id,order_number,order_date,marketplace,store_name,customer_name,status,grand_total").order("order_date", { ascending: false }).limit(2500),
-      supabase.from("inventory").select("item_id,location_name,quantity,available_quantity,products(sku,name)").order("available_quantity", { ascending: true }).limit(500),
-    ]);
-    if (ordersResult.data) setOrders(ordersResult.data as Order[]);
-    if (stockResult.data) setStocks(stockResult.data as unknown as Stock[]);
-    setRefreshing(false);
-  }
-
-  useEffect(() => {
-    loadData();
-  }, [session]);
-
-  async function signIn(event: React.FormEvent) {
-    event.preventDefault();
-    if (!supabase) return;
-    setAuthError("");
-    setAuthMessage("");
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setAuthError("Email atau password belum benar.");
-  }
-
-  async function sendMagicLink() {
-    if (!supabase || !email.trim()) {
-      setAuthError("Isi email terlebih dahulu.");
+      await auth.updatePassword(password);
       return;
     }
-    setAuthError("");
-    setAuthMessage("");
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: "https://warehouse-brancheeline.github.io/jubelio-dashboard/",
-        shouldCreateUser: false,
-      },
-    });
-    if (error) {
-      setAuthError(
-        error.status === 429
-          ? "Batas kirim email sedang aktif. Tunggu beberapa saat lalu coba lagi."
-          : error.message,
-      );
+    if (showRecoveryRequest) {
+      await auth.sendRecovery(email);
       return;
     }
-    setAuthMessage("Link masuk sudah dikirim. Silakan cek inbox atau folder spam.");
+    await auth.signIn(email, password);
   }
 
-  async function updatePassword(event: React.FormEvent) {
-    event.preventDefault();
-    if (!supabase) return;
-    setAuthError("");
-    setAuthMessage("");
-
-    if (newPassword.length < 8) {
-      setAuthError("Password baru minimal 8 karakter.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setAuthError("Konfirmasi password belum sama.");
-      return;
-    }
-
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setAuthError(error.message || "Password belum berhasil diperbarui.");
-      return;
-    }
-
-    await supabase.auth.signOut();
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setSession(null);
-    setIsPasswordRecovery(false);
-    setNewPassword("");
-    setConfirmPassword("");
-    setAuthMessage("Password berhasil dibuat. Silakan masuk dengan password baru.");
-  }
-
-  const visibleOrders = orders.length ? orders : demoOrders;
-  const warehouseOptions = useMemo(
-    () => [...new Set(stocks.map((stock) => stock.location_name).filter(Boolean) as string[])].sort(),
-    [stocks],
-  );
-  const platformOptions = useMemo(
-    () => [...new Set(visibleOrders.map((order) => order.marketplace).filter(Boolean) as string[])].sort(),
-    [visibleOrders],
-  );
-  const storeOptions = useMemo(
-    () => [...new Set(
-      visibleOrders
-        .filter((order) => !platformFilter || order.marketplace === platformFilter)
-        .map((order) => order.store_name)
-        .filter(Boolean) as string[],
-    )].sort(),
-    [visibleOrders, platformFilter],
-  );
-  const activeOrders = useMemo(
-    () => visibleOrders.filter((order) => {
-      if (String(order.status).toUpperCase().includes("CANCEL")) return false;
-      if (platformFilter && order.marketplace !== platformFilter) return false;
-      if (storeFilter && order.store_name !== storeFilter) return false;
-      if (dateFrom && (!order.order_date || new Date(order.order_date) < new Date(`${dateFrom}T00:00:00`))) return false;
-      if (dateTo && (!order.order_date || new Date(order.order_date) > new Date(`${dateTo}T23:59:59.999`))) return false;
-      return true;
-    }),
-    [visibleOrders, platformFilter, storeFilter, dateFrom, dateTo],
-  );
-  const revenue = activeOrders.reduce((sum, order) => sum + Number(order.grand_total ?? 0), 0);
-  const channelData = useMemo(() => {
-    const grouped = new Map<string, number>();
-    activeOrders.forEach((order) => {
-      const key = order.marketplace || "LAINNYA";
-      grouped.set(key, (grouped.get(key) || 0) + Number(order.grand_total || 0));
-    });
-    return [...grouped.entries()].map(([channel, value]) => ({ channel, value })).sort((a, b) => b.value - a.value).slice(0, 6);
-  }, [activeOrders]);
-  const trendData = useMemo(() => {
-    const days = new Map<string, number>();
-    activeOrders.forEach((order) => {
-      if (!order.order_date) return;
-      const key = new Date(order.order_date).toLocaleDateString("id-ID", { day: "2-digit", month: "short" });
-      days.set(key, (days.get(key) || 0) + Number(order.grand_total || 0));
-    });
-    return [...days.entries()].slice(0, 14).reverse().map(([date, value]) => ({ date, value }));
-  }, [activeOrders]);
-  const filteredStocks = stocks.filter(
-    (stock) => !warehouseFilter || stock.location_name === warehouseFilter,
-  );
-  const lowStock = filteredStocks.filter((stock) => Number(stock.available_quantity ?? 0) <= 5);
-  const activeFilterCount = [warehouseFilter, platformFilter, storeFilter, dateFrom || dateTo].filter(Boolean).length;
-  const filteredOrders = activeOrders.filter((order) =>
-    `${order.order_number} ${order.marketplace} ${order.store_name}`.toLowerCase().includes(query.toLowerCase()),
-  ).slice(0, 8);
-
-  if (loading) return <div className="page-loader"><Sparkles /> Menyiapkan command center…</div>;
-
-  if (isConfigured && isPasswordRecovery) {
-    return (
-      <main className="auth-shell">
-        <section className="auth-story">
-          <div className="brand-mark"><span>BE</span></div>
-          <p className="eyebrow">Pemulihan akun</p>
-          <h1>Buat password baru.</h1>
-          <p>Gunakan password yang kuat dan hanya Anda yang mengetahuinya.</p>
-        </section>
-        <form className="auth-card" onSubmit={updatePassword}>
-          <p className="eyebrow">Langkah terakhir</p>
-          <h2>Atur password baru</h2>
-          <label>Password baru<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" required /></label>
-          <label>Ulangi password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" required /></label>
-          {authError && <p className="form-error">{authError}</p>}
-          <button type="submit">Simpan password baru</button>
-          <small>Setelah tersimpan, Anda akan kembali ke halaman login.</small>
-        </form>
-      </main>
-    );
-  }
-
-  if (isConfigured && !session) {
-    return (
-      <main className="auth-shell">
-        <section className="auth-story">
-          <div className="brand-mark"><span>BE</span></div>
-          <p className="eyebrow">Jubelio intelligence workspace</p>
-          <h1>Semua sinyal bisnis, dalam satu pandangan.</h1>
-          <p>Revenue, order, dan stok dari seluruh channel—diringkas untuk keputusan yang lebih cepat.</p>
-          <div className="auth-proof">
-            <div><strong>206K+</strong><span>order siap dianalisis</span></div>
-            <div><strong>4</strong><span>lokasi terhubung</span></div>
-          </div>
-        </section>
-        <form className="auth-card" onSubmit={signIn}>
-          <p className="eyebrow">Akses internal</p>
-          <h2>Masuk ke dashboard</h2>
-          <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-          <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-          {authError && <p className="form-error">{authError}</p>}
-          {authMessage && <p className="form-success">{authMessage}</p>}
-          <button type="submit">Masuk dengan aman</button>
-          <button type="button" className="secondary-auth-button" onClick={sendMagicLink}>Kirim link masuk ke email</button>
-          <small>Akun dibuat oleh administrator melalui Supabase.</small>
-        </form>
-      </main>
-    );
-  }
+  const passwordMismatch =
+    auth.mode === "recovery" && Boolean(confirmPassword) && password !== confirmPassword;
 
   return (
-    <div className="app-shell">
-      <aside>
-        <div className="logo"><div className="brand-mark small"><span>BE</span></div><div><strong>Command</strong><span>Center</span></div></div>
-        <nav>
-          <button className="active"><LayoutDashboard /> Ringkasan</button>
-          <button><ShoppingBag /> Order</button>
-          <button><Boxes /> Persediaan</button>
-          <button><Warehouse /> Lokasi</button>
-        </nav>
-        <div className="side-note"><Sparkles /><strong>Data tersinkron</strong><span>Jubelio → Supabase</span></div>
-        {session && <button className="logout" onClick={() => supabase?.auth.signOut()}><LogOut /> Keluar</button>}
-      </aside>
+    <main className="auth-shell">
+      <section className="auth-story">
+        <div className="brand-mark">BE</div>
+        <p className="eyebrow">JUBELIO INTELLIGENCE WORKSPACE</p>
+        <h1>Semua sinyal bisnis, dalam satu pandangan.</h1>
+        <p className="auth-lead">
+          Revenue, order, dan stok dari seluruh channel—diringkas dari data Jubelio yang
+          tersimpan aman di Supabase.
+        </p>
+        <div className="auth-points">
+          <span>
+            <CheckCircle2 size={18} /> Data asli
+          </span>
+          <span>
+            <CheckCircle2 size={18} /> Akses internal
+          </span>
+          <span>
+            <CheckCircle2 size={18} /> Waktu WITA
+          </span>
+        </div>
+      </section>
 
-      <main className="dashboard">
-        <header>
-          <div><p className="eyebrow">Minggu ini</p><h1>Selamat datang kembali.</h1><p>Berikut denyut operasional bisnis Anda hari ini.</p></div>
-          <div className="header-actions">
-            <label className="search"><Search /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cari order atau channel" /></label>
-            <button className="icon-button" onClick={loadData} aria-label="Muat ulang data"><RefreshCw className={refreshing ? "spin" : ""} /></button>
-          </div>
-        </header>
+      <section className="auth-panel">
+        <form className="auth-card" onSubmit={submit}>
+          <p className="eyebrow">AKSES INTERNAL</p>
+          <h2>
+            {auth.mode === "recovery"
+              ? "Buat password baru"
+              : showRecoveryRequest
+                ? "Pulihkan akses"
+                : "Masuk ke dashboard"}
+          </h2>
 
-        {!isConfigured && <div className="demo-banner"><AlertTriangle /> Mode pratinjau aktif. Tambahkan konfigurasi Supabase saat deployment untuk menampilkan data asli.</div>}
+          {auth.mode !== "recovery" && (
+            <label>
+              Email
+              <span className="input-with-icon">
+                <Mail size={18} />
+                <input
+                  autoComplete="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="nama@perusahaan.com"
+                  required
+                />
+              </span>
+            </label>
+          )}
 
-        <section className="metric-grid">
-          <article className="metric hero-metric">
-            <div className="metric-icon"><CircleDollarSign /></div>
-            <button className={`filter-trigger ${activeFilterCount ? "has-filter" : ""}`} onClick={() => setFiltersOpen((open) => !open)} aria-label="Buka filter dashboard">
-              <SlidersHorizontal />
-              {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
+          {!showRecoveryRequest && (
+            <label>
+              {auth.mode === "recovery" ? "Password baru" : "Password"}
+              <span className="input-with-icon">
+                <LockKeyhole size={18} />
+                <input
+                  autoComplete={auth.mode === "recovery" ? "new-password" : "current-password"}
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  minLength={8}
+                  required
+                />
+              </span>
+            </label>
+          )}
+
+          {auth.mode === "recovery" && (
+            <label>
+              Ulangi password baru
+              <span className="input-with-icon">
+                <LockKeyhole size={18} />
+                <input
+                  autoComplete="new-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  minLength={8}
+                  required
+                />
+              </span>
+              {passwordMismatch && <small className="field-error">Password belum sama.</small>}
+            </label>
+          )}
+
+          {auth.message && (
+            <div className={`auth-message ${auth.messageKind}`}>
+              {auth.messageKind === "error" ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
+              <span>{auth.message}</span>
+            </div>
+          )}
+
+          <button className="primary-button auth-submit" disabled={auth.busy || passwordMismatch}>
+            {auth.busy && <LoaderCircle className="spin" size={18} />}
+            {auth.mode === "recovery"
+              ? "Simpan password baru"
+              : showRecoveryRequest
+                ? "Kirim tautan pemulihan"
+                : "Masuk dengan aman"}
+          </button>
+
+          {auth.mode === "login" && !showRecoveryRequest && (
+            <div className="auth-actions">
+              <button type="button" onClick={() => void auth.sendMagicLink(email)} disabled={!email || auth.busy}>
+                Kirim tautan masuk
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRecoveryRequest(true);
+                  auth.clearMessage();
+                }}
+              >
+                Lupa password?
+              </button>
+            </div>
+          )}
+          {showRecoveryRequest && (
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => {
+                setShowRecoveryRequest(false);
+                auth.clearMessage();
+              }}
+            >
+              Kembali ke login
             </button>
-            {filtersOpen && (
-              <div className="filter-panel">
-                <div className="filter-panel-head">
-                  <div><span>Filter dashboard</span><strong>Sesuaikan data</strong></div>
-                  <button onClick={() => setFiltersOpen(false)} aria-label="Tutup filter">×</button>
-                </div>
-                <label>Gudang
-                  <select value={warehouseFilter} onChange={(event) => setWarehouseFilter(event.target.value)}>
-                    <option value="">Semua gudang</option>
-                    {warehouseOptions.map((warehouseName) => <option key={warehouseName} value={warehouseName}>{warehouseName}</option>)}
-                  </select>
-                </label>
-                <label>Platform penjualan
-                  <select value={platformFilter} onChange={(event) => { setPlatformFilter(event.target.value); setStoreFilter(""); }}>
-                    <option value="">Semua platform</option>
-                    {platformOptions.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
-                  </select>
-                </label>
-                <label>Toko marketplace
-                  <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
-                    <option value="">Semua toko</option>
-                    {storeOptions.map((store) => <option key={store} value={store}>{store}</option>)}
-                  </select>
-                </label>
-                <div className="date-filter">
-                  <label>Dari tanggal<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
-                  <label>Sampai tanggal<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
-                </div>
-                <button className="clear-filters" onClick={() => { setWarehouseFilter(""); setPlatformFilter(""); setStoreFilter(""); setDateFrom(""); setDateTo(""); }}>Reset filter</button>
-              </div>
-            )}
-            <span>Revenue terpantau</span>
-            <strong>{rupiah.format(revenue)}</strong>
-            <small><ArrowUpRight /> Data order selesai terbaru</small>
-          </article>
-          <article className="metric"><div className="metric-icon amber"><ShoppingBag /></div><span>Order dianalisis</span><strong>{compact.format(activeOrders.length)}</strong><small><ArrowUpRight /> Tidak termasuk pembatalan</small></article>
-          <article className="metric"><div className="metric-icon blue"><PackageCheck /></div><span>Baris stok</span><strong>{compact.format(filteredStocks.length || (stocks.length ? 0 : 10276))}</strong><small><ArrowUpRight /> {warehouseFilter || "Dari 4 lokasi aktif"}</small></article>
-          <article className="metric"><div className="metric-icon red"><AlertTriangle /></div><span>Stok perlu perhatian</span><strong>{compact.format(lowStock.length)}</strong><small className="danger"><ArrowDownRight /> Tersedia ≤ 5 unit</small></article>
-        </section>
+          )}
+          <p className="auth-footnote">Akun dibuat oleh administrator melalui Supabase.</p>
+        </form>
+      </section>
+    </main>
+  );
+}
 
-        <section className="chart-grid">
-          <article className="panel trend-panel">
-            <div className="panel-head"><div><span>Tren revenue</span><h2>Performa harian</h2></div><button>14 hari <ChevronDown /></button></div>
-            <div className="chart-wrap">
+type FilterBarProps = {
+  filters: DashboardFilters;
+  options: ReturnType<typeof useDashboardData>["data"]["filterOptions"];
+  onChange: (key: keyof DashboardFilters, value: string) => void;
+  onReset: () => void;
+};
+
+function FilterBar({ filters, options, onChange, onReset }: FilterBarProps) {
+  const stores = filters.marketplace
+    ? options.stores.filter((row) => row.marketplace === filters.marketplace)
+    : options.stores;
+
+  return (
+    <section className="filter-panel" aria-label="Filter dashboard">
+      <div className="filter-title">
+        <SlidersHorizontal size={18} />
+        <span>Filter data</span>
+      </div>
+      <label>
+        Dari tanggal
+        <span className="filter-input">
+          <CalendarDays size={16} />
+          <input
+            type="date"
+            value={filters.dateFrom}
+            max={filters.dateTo}
+            onChange={(event) => onChange("dateFrom", event.target.value)}
+          />
+        </span>
+      </label>
+      <label>
+        Sampai tanggal
+        <span className="filter-input">
+          <CalendarDays size={16} />
+          <input
+            type="date"
+            value={filters.dateTo}
+            min={filters.dateFrom}
+            onChange={(event) => onChange("dateTo", event.target.value)}
+          />
+        </span>
+      </label>
+      <label>
+        Gudang
+        <select value={filters.location} onChange={(event) => onChange("location", event.target.value)}>
+          <option value="">Semua gudang</option>
+          {options.locations.map((location) => (
+            <option key={location} value={location}>
+              {location}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Platform
+        <select
+          value={filters.marketplace}
+          onChange={(event) => onChange("marketplace", event.target.value)}
+        >
+          <option value="">Semua platform</option>
+          {options.marketplaces.map((marketplace) => (
+            <option key={marketplace} value={marketplace}>
+              {marketplace}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Toko marketplace
+        <select value={filters.store} onChange={(event) => onChange("store", event.target.value)}>
+          <option value="">Semua toko</option>
+          {stores.map((row) => (
+            <option key={`${row.marketplace}-${row.store}`} value={row.store}>
+              {row.store}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Status order
+        <select value={filters.status} onChange={(event) => onChange("status", event.target.value)}>
+          <option value="">Semua status tersedia</option>
+          {options.statuses.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button className="icon-text-button" onClick={onReset} type="button">
+        <RotateCcw size={16} /> Reset
+      </button>
+    </section>
+  );
+}
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  hint,
+  tone = "green",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  hint: string;
+  tone?: "green" | "blue" | "amber" | "red";
+}) {
+  return (
+    <article className="kpi-card">
+      <span className={`kpi-icon ${tone}`}>{icon}</span>
+      <div>
+        <p>{label}</p>
+        <strong>{value}</strong>
+        <small>{hint}</small>
+      </div>
+    </article>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="empty-state">
+      <Boxes size={34} />
+      <strong>{title}</strong>
+      <p>{body}</p>
+    </div>
+  );
+}
+
+function SummaryView({
+  controller,
+}: {
+  controller: ReturnType<typeof useDashboardData>;
+}) {
+  const { data } = controller;
+  const coverage =
+    data.kpis.backfill_total > 0
+      ? Math.min(100, (data.kpis.backfill_loaded / data.kpis.backfill_total) * 100)
+      : 0;
+
+  return (
+    <>
+      {!data.kpis.backfill_completed && (
+        <div className="coverage-banner">
+          <AlertCircle size={20} />
+          <div>
+            <strong>Histori order masih dilengkapi</strong>
+            <p>
+              {formatNumber(data.kpis.backfill_loaded)} dari sekitar{" "}
+              {formatNumber(data.kpis.backfill_total)} order selesai sudah tersedia (
+              {coverage.toFixed(1)}%). Angka akan bertambah selama backfill berjalan.
+            </p>
+          </div>
+          <div className="coverage-progress" aria-label={`Progres ${coverage.toFixed(1)} persen`}>
+            <span style={{ width: `${coverage}%` }} />
+          </div>
+        </div>
+      )}
+
+      <section className="kpi-grid">
+        <KpiCard
+          icon={<CircleDollarSign size={22} />}
+          label="Revenue"
+          value={formatCurrency(data.kpis.revenue)}
+          hint="Total grand total order pada filter"
+        />
+        <KpiCard
+          icon={<ShoppingBag size={22} />}
+          label="Order"
+          value={formatNumber(data.kpis.order_count)}
+          hint="Order tersimpan pada filter"
+          tone="amber"
+        />
+        <KpiCard
+          icon={<PackageCheck size={22} />}
+          label="Stok tersedia"
+          value={formatNumber(data.kpis.total_available)}
+          hint={`${formatNumber(data.kpis.total_allocated)} unit teralokasi`}
+          tone="blue"
+        />
+        <KpiCard
+          icon={<AlertCircle size={22} />}
+          label="Stok perlu perhatian"
+          value={formatNumber(data.kpis.low_stock_rows + data.kpis.out_of_stock_rows)}
+          hint={`${formatNumber(data.kpis.out_of_stock_rows)} habis · ${formatNumber(data.kpis.low_stock_rows)} menipis`}
+          tone="red"
+        />
+      </section>
+
+      <section className="chart-grid">
+        <article className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">TREN REVENUE</p>
+              <h2>Performa harian</h2>
+            </div>
+            <span className="panel-meta">Zona waktu WITA</span>
+          </div>
+          {data.trend.length ? (
+            <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={trendData}>
-                  <defs><linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34c887" stopOpacity={0.38}/><stop offset="100%" stopColor="#34c887" stopOpacity={0}/></linearGradient></defs>
-                  <CartesianGrid stroke="#dce7e1" strokeDasharray="3 5" vertical={false} />
-                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: "#718078", fontSize: 12 }} />
-                  <YAxis hide />
-                  <Tooltip formatter={(value) => rupiah.format(Number(value))} contentStyle={{ borderRadius: 14, border: "1px solid #dce7e1" }} />
-                  <Area type="monotone" dataKey="value" stroke="#17865a" strokeWidth={3} fill="url(#revenueFill)" />
+                <AreaChart data={data.trend}>
+                  <defs>
+                    <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#1f9467" stopOpacity={0.32} />
+                      <stop offset="100%" stopColor="#1f9467" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#dce7e1" strokeDasharray="4 5" vertical={false} />
+                  <XAxis
+                    dataKey="business_date"
+                    tickFormatter={(value) => formatBusinessDate(String(value)).replace(" 2026", "")}
+                    minTickGap={28}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={(value) => formatCompactNumber(Number(value))}
+                    axisLine={false}
+                    tickLine={false}
+                    width={68}
+                  />
+                  <Tooltip
+                    labelFormatter={(value) => formatBusinessDate(String(value))}
+                    formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#14825a"
+                    strokeWidth={3}
+                    fill="url(#revenueFill)"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </article>
-          <article className="panel channel-panel">
-            <div className="panel-head"><div><span>Kontribusi channel</span><h2>Revenue per marketplace</h2></div></div>
-            <div className="chart-wrap">
+          ) : (
+            <EmptyState title="Belum ada tren" body="Tidak ada order pada kombinasi filter ini." />
+          )}
+        </article>
+
+        <article className="panel chart-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">KONTRIBUSI CHANNEL</p>
+              <h2>Revenue per platform</h2>
+            </div>
+          </div>
+          {data.channels.length ? (
+            <div className="chart-box">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={channelData} layout="vertical" margin={{ left: 8, right: 8 }}>
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="channel" width={84} axisLine={false} tickLine={false} tick={{ fill: "#435149", fontSize: 11 }} />
-                  <Tooltip formatter={(value) => rupiah.format(Number(value))} cursor={{ fill: "#f2f7f4" }} />
-                  <Bar dataKey="value" fill="#1e9365" radius={[0, 7, 7, 0]} barSize={18} />
+                <BarChart data={data.channels} layout="vertical" margin={{ left: 18 }}>
+                  <CartesianGrid stroke="#e4ece8" strokeDasharray="4 5" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tickFormatter={(value) => formatCompactNumber(Number(value))}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="marketplace"
+                    width={105}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), "Revenue"]} />
+                  <Bar dataKey="revenue" fill="#1f9467" radius={[0, 8, 8, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </article>
-        </section>
+          ) : (
+            <EmptyState title="Belum ada kontribusi" body="Tidak ada channel pada filter ini." />
+          )}
+        </article>
+      </section>
 
-        <section className="bottom-grid">
-          <article className="panel orders-panel">
-            <div className="panel-head"><div><span>Aktivitas terbaru</span><h2>Order terakhir</h2></div><button>Lihat semua</button></div>
-            <div className="table">
-              <div className="tr table-head"><span>Order</span><span>Channel</span><span>Status</span><span>Total</span></div>
-              {filteredOrders.map((order) => (
-                <div className="tr" key={order.order_id}>
-                  <span><strong>{order.order_number}</strong><small>{order.order_date ? new Date(order.order_date).toLocaleDateString("id-ID") : "—"}</small></span>
-                  <span>{order.marketplace}</span>
-                  <span><em>{order.status}</em></span>
-                  <span className="money">{rupiah.format(Number(order.grand_total || 0))}</span>
-                </div>
-              ))}
+      <article className="panel source-note">
+        <div>
+          <p className="eyebrow">KETERSEDIAAN SUMBER</p>
+          <h2>Yang sudah dan belum tersedia</h2>
+        </div>
+        <ul>
+          <li>Order yang tersinkron saat ini hanya berstatus selesai/COMPLETED.</li>
+          <li>Detail item order belum tersedia karena tabel sumber `order_items` masih kosong.</li>
+          <li>Incoming stock tidak dikirim oleh sumber saat ini; angka tidak direkayasa.</li>
+          <li>Nilai stok negatif dari sumber dijaga minimum nol pada tampilan.</li>
+        </ul>
+      </article>
+    </>
+  );
+}
+
+function SortButton({
+  label,
+  column,
+  active,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: string;
+  active: string;
+  direction: SortDirection;
+  onSort: (column: string) => void;
+}) {
+  return (
+    <button className={active === column ? "sort-button active" : "sort-button"} onClick={() => onSort(column)}>
+      {label}
+      <ArrowDownUp size={13} />
+      {active === column && <span className="sr-only">{direction === "asc" ? "menaik" : "menurun"}</span>}
+    </button>
+  );
+}
+
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onPage,
+  onPageSize,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+}) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total ? (page - 1) * pageSize + 1 : 0;
+  const to = Math.min(page * pageSize, total);
+  return (
+    <div className="pagination">
+      <span>
+        {formatNumber(from)}–{formatNumber(to)} dari {formatNumber(total)}
+      </span>
+      <label>
+        Baris
+        <select value={pageSize} onChange={(event) => onPageSize(Number(event.target.value))}>
+          {[25, 50, 100].map((size) => (
+            <option key={size}>{size}</option>
+          ))}
+        </select>
+      </label>
+      <button disabled={page <= 1} onClick={() => onPage(page - 1)} aria-label="Halaman sebelumnya">
+        <ChevronLeft size={18} />
+      </button>
+      <strong>
+        {page} / {pages}
+      </strong>
+      <button disabled={page >= pages} onClick={() => onPage(page + 1)} aria-label="Halaman berikutnya">
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  );
+}
+
+function OrderDetail({
+  order,
+  loadItems,
+  onClose,
+}: {
+  order: OrderRow;
+  loadItems: (orderId: number) => Promise<OrderItem[]>;
+  onClose: () => void;
+}) {
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void loadItems(order.order_id)
+      .then((rows) => {
+        if (active) setItems(rows);
+      })
+      .catch((reason) => {
+        if (active) setError(reason instanceof Error ? reason.message : String(reason));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadItems, order.order_id]);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="modal-card" role="dialog" aria-modal="true" aria-label="Detail order" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Tutup detail">
+          <X size={20} />
+        </button>
+        <p className="eyebrow">DETAIL ORDER</p>
+        <h2>{order.order_number || `Order ${order.order_id}`}</h2>
+        <div className="detail-grid">
+          <div><span>Tanggal (WITA)</span><strong>{formatDateTime(order.order_date)}</strong></div>
+          <div><span>Status</span><strong>{order.status}</strong></div>
+          <div><span>Platform</span><strong>{order.marketplace}</strong></div>
+          <div><span>Toko</span><strong>{order.store_name || "—"}</strong></div>
+          <div><span>Pelanggan</span><strong>{order.customer_name || "—"}</strong></div>
+          <div><span>Gudang</span><strong>{order.location_name || "Tidak dikirim sumber"}</strong></div>
+          <div><span>Subtotal</span><strong>{formatCurrency(order.subtotal)}</strong></div>
+          <div><span>Grand total</span><strong>{formatCurrency(order.grand_total)}</strong></div>
+        </div>
+        <h3>Item order</h3>
+        {loading ? (
+          <div className="inline-loader"><LoaderCircle className="spin" size={20} /> Memuat item…</div>
+        ) : error ? (
+          <div className="error-banner"><AlertCircle size={18} /> {error}</div>
+        ) : items.length ? (
+          <div className="table-scroll detail-table">
+            <table>
+              <thead><tr><th>SKU</th><th>Produk</th><th>Qty</th><th>Harga</th><th>Total</th></tr></thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={`${item.order_id}-${item.item_id}`}>
+                    <td>{item.sku}</td><td>{item.product_name || "—"}</td>
+                    <td>{formatNumber(item.quantity)}</td><td>{formatCurrency(item.price)}</td>
+                    <td>{formatCurrency(item.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="Detail item belum tersinkron"
+            body="Order ini nyata, tetapi Jubelio sync saat ini belum mengisi tabel order_items."
+          />
+        )}
+      </section>
+    </div>
+  );
+}
+
+type OrdersViewProps = {
+  controller: ReturnType<typeof useDashboardData>;
+  search: string;
+  onSearch: (value: string) => void;
+  page: number;
+  pageSize: number;
+  sort: DataQuery["orderSort"];
+  direction: SortDirection;
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+  onSort: (sort: DataQuery["orderSort"]) => void;
+};
+
+function OrdersView(props: OrdersViewProps) {
+  const { data, loadOrderItems } = props.controller;
+  const [selected, setSelected] = useState<OrderRow | null>(null);
+
+  function exportRows() {
+    const csv = buildCsv(
+      ["Nomor", "Tanggal WITA", "Platform", "Toko", "Pelanggan", "Gudang", "Status", "Grand Total"],
+      data.orders.map((order) => [
+        order.order_number,
+        formatDateTime(order.order_date),
+        order.marketplace,
+        order.store_name,
+        order.customer_name,
+        order.location_name,
+        order.status,
+        order.grand_total,
+      ]),
+    );
+    downloadCsv(`jubelio-orders-${businessDate()}.csv`, csv);
+  }
+
+  function sort(column: string) {
+    props.onSort(column as DataQuery["orderSort"]);
+  }
+
+  return (
+    <>
+      <section className="module-stat-row">
+        <div><span>Order sesuai filter</span><strong>{formatNumber(data.orderCount)}</strong></div>
+        <div><span>Revenue sesuai filter</span><strong>{formatCurrency(data.orderRevenue)}</strong></div>
+        <div><span>Baris halaman ini</span><strong>{formatNumber(data.orders.length)}</strong></div>
+      </section>
+      <article className="panel table-panel">
+        <div className="table-toolbar">
+          <label className="search-field">
+            <Search size={18} />
+            <input
+              value={props.search}
+              onChange={(event) => props.onSearch(event.target.value)}
+              placeholder="Cari nomor, customer, toko, atau channel"
+            />
+          </label>
+          <button className="secondary-button" onClick={exportRows} disabled={!data.orders.length}>
+            <Download size={17} /> Ekspor halaman CSV
+          </button>
+        </div>
+        {data.orders.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th><SortButton label="Order" column="order_number" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th><SortButton label="Tanggal WITA" column="order_date" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th><SortButton label="Platform" column="marketplace" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th>Toko</th><th>Pelanggan</th><th>Gudang</th>
+                  <th><SortButton label="Status" column="status" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th className="number-cell"><SortButton label="Nilai" column="grand_total" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th aria-label="Aksi" />
+                </tr>
+              </thead>
+              <tbody>
+                {data.orders.map((order) => (
+                  <tr key={order.order_id}>
+                    <td><strong>{order.order_number || order.order_id}</strong></td>
+                    <td>{formatDateTime(order.order_date)}</td>
+                    <td>{order.marketplace}</td><td>{order.store_name || "—"}</td>
+                    <td>{order.customer_name || "—"}</td>
+                    <td>{order.location_name || <span className="muted">Tidak tersedia</span>}</td>
+                    <td><span className="status-pill complete">{order.status}</span></td>
+                    <td className="number-cell">{formatCurrency(order.grand_total)}</td>
+                    <td><button className="row-action" onClick={() => setSelected(order)} aria-label={`Lihat ${order.order_number}`}><Eye size={17} /></button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="Order tidak ditemukan" body="Ubah filter atau kata pencarian untuk melihat order." />
+        )}
+        <Pagination page={props.page} pageSize={props.pageSize} total={data.orderCount} onPage={props.onPage} onPageSize={props.onPageSize} />
+      </article>
+      {selected && (
+        <OrderDetail
+          key={selected.order_id}
+          order={selected}
+          loadItems={loadOrderItems}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
+  );
+}
+
+type InventoryViewProps = {
+  controller: ReturnType<typeof useDashboardData>;
+  search: string;
+  status: string;
+  onSearch: (value: string) => void;
+  onStatus: (value: string) => void;
+  page: number;
+  pageSize: number;
+  sort: DataQuery["inventorySort"];
+  direction: SortDirection;
+  onPage: (page: number) => void;
+  onPageSize: (size: number) => void;
+  onSort: (sort: DataQuery["inventorySort"]) => void;
+};
+
+function InventoryView(props: InventoryViewProps) {
+  const { data } = props.controller;
+
+  function exportRows() {
+    const csv = buildCsv(
+      ["SKU", "Produk", "Gudang", "On hand", "Tersedia", "Teralokasi", "Incoming", "Status"],
+      data.inventory.map((item) => [
+        item.sku,
+        item.product_name,
+        item.location_name,
+        item.on_hand_quantity,
+        item.available_quantity,
+        item.allocated_quantity,
+        item.incoming_quantity ?? "Belum tersedia",
+        stockStatusLabel(item.stock_status),
+      ]),
+    );
+    downloadCsv(`jubelio-inventory-${businessDate()}.csv`, csv);
+  }
+
+  function sort(column: string) {
+    props.onSort(column as DataQuery["inventorySort"]);
+  }
+
+  return (
+    <>
+      <section className="module-stat-row">
+        <div><span>Baris stok</span><strong>{formatNumber(data.inventoryCount)}</strong></div>
+        <div><span>Total tersedia</span><strong>{formatNumber(data.kpis.total_available)}</strong></div>
+        <div><span>Total teralokasi</span><strong>{formatNumber(data.kpis.total_allocated)}</strong></div>
+      </section>
+      <article className="panel table-panel">
+        <div className="table-toolbar">
+          <label className="search-field">
+            <Search size={18} />
+            <input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="Cari SKU, produk, brand, atau kategori" />
+          </label>
+          <select className="toolbar-select" value={props.status} onChange={(event) => props.onStatus(event.target.value)}>
+            <option value="">Semua status stok</option>
+            <option value="OUT_OF_STOCK">Habis</option>
+            <option value="LOW_STOCK">Menipis (≤ 5)</option>
+            <option value="HEALTHY">Sehat</option>
+          </select>
+          <button className="secondary-button" onClick={exportRows} disabled={!data.inventory.length}>
+            <Download size={17} /> Ekspor halaman CSV
+          </button>
+        </div>
+        {data.inventory.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th><SortButton label="SKU" column="sku" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th><SortButton label="Produk" column="product_name" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th><SortButton label="Gudang" column="location_name" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th className="number-cell">On hand</th>
+                  <th className="number-cell"><SortButton label="Tersedia" column="available_quantity" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th className="number-cell"><SortButton label="Teralokasi" column="allocated_quantity" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                  <th className="number-cell">Incoming</th>
+                  <th><SortButton label="Status" column="stock_status" active={props.sort} direction={props.direction} onSort={sort} /></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.inventory.map((item) => (
+                  <tr key={`${item.item_id}-${item.location_id}`}>
+                    <td><strong>{item.sku || "—"}</strong></td>
+                    <td><strong>{item.product_name}</strong><small className="table-subline">{[item.brand, item.category].filter(Boolean).join(" · ")}</small></td>
+                    <td>{item.location_name}</td>
+                    <td className="number-cell">{formatNumber(item.on_hand_quantity)}</td>
+                    <td className="number-cell">{formatNumber(item.available_quantity)}</td>
+                    <td className="number-cell">{formatNumber(item.allocated_quantity)}</td>
+                    <td className="number-cell"><span className="muted">{item.incoming_quantity == null ? "Belum tersedia" : formatNumber(item.incoming_quantity)}</span></td>
+                    <td><span className={`status-pill ${item.stock_status.toLowerCase()}`}>{stockStatusLabel(item.stock_status)}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="Stok tidak ditemukan" body="Ubah gudang, status stok, atau kata pencarian." />
+        )}
+        <Pagination page={props.page} pageSize={props.pageSize} total={data.inventoryCount} onPage={props.onPage} onPageSize={props.onPageSize} />
+      </article>
+    </>
+  );
+}
+
+function LocationsView({
+  controller,
+  onOpen,
+}: {
+  controller: ReturnType<typeof useDashboardData>;
+  onOpen: (location: string) => void;
+}) {
+  const { locations } = controller.data;
+  if (!locations.length) {
+    return <EmptyState title="Lokasi belum tersedia" body="Sinkronkan inventory Jubelio untuk memuat lokasi." />;
+  }
+  return (
+    <section className="location-grid">
+      {locations.map((location) => (
+        <article className="location-card" key={location.location_id}>
+          <div className="location-icon"><Warehouse size={22} /></div>
+          <div>
+            <p className="eyebrow">LOKASI {location.location_id}</p>
+            <h2>{location.location_name}</h2>
+          </div>
+          <dl>
+            <div><dt>SKU</dt><dd>{formatNumber(location.sku_count)}</dd></div>
+            <div><dt>On hand</dt><dd>{formatNumber(location.on_hand_quantity)}</dd></div>
+            <div><dt>Tersedia</dt><dd>{formatNumber(location.available_quantity)}</dd></div>
+            <div><dt>Teralokasi</dt><dd>{formatNumber(location.allocated_quantity)}</dd></div>
+            <div><dt>Habis</dt><dd>{formatNumber(location.out_of_stock_count)}</dd></div>
+            <div><dt>Menipis</dt><dd>{formatNumber(location.low_stock_count)}</dd></div>
+          </dl>
+          <p className="location-sync">Terakhir sinkron {formatDateTime(location.synced_at)}</p>
+          <button className="secondary-button" onClick={() => onOpen(location.location_name)}>
+            Lihat persediaan <ChevronRight size={17} />
+          </button>
+        </article>
+      ))}
+    </section>
+  );
+}
+
+const NAV_ITEMS: { id: ViewName; label: string; icon: React.ReactNode }[] = [
+  { id: "summary", label: "Ringkasan", icon: <LayoutDashboard size={20} /> },
+  { id: "orders", label: "Order", icon: <ShoppingBag size={20} /> },
+  { id: "inventory", label: "Persediaan", icon: <Boxes size={20} /> },
+  { id: "locations", label: "Lokasi", icon: <Warehouse size={20} /> },
+];
+
+const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description: string }> = {
+  summary: {
+    eyebrow: "PUSAT OPERASIONAL",
+    title: "Ringkasan bisnis",
+    description: "Revenue, order, dan kesehatan stok berdasarkan filter yang sama.",
+  },
+  orders: {
+    eyebrow: "TRANSAKSI",
+    title: "Order",
+    description: "Telusuri dan audit order Jubelio yang sudah tersinkron.",
+  },
+  inventory: {
+    eyebrow: "PERSEDIAAN",
+    title: "Stok per produk dan gudang",
+    description: "On hand, tersedia, dan alokasi tanpa nilai negatif di tampilan.",
+  },
+  locations: {
+    eyebrow: "JARINGAN GUDANG",
+    title: "Lokasi",
+    description: "Ringkasan stok nyata untuk setiap lokasi Jubelio.",
+  },
+};
+
+function Dashboard({ auth }: { auth: AuthController }) {
+  const [activeView, setActiveView] = useState<ViewName>("summary");
+  const [filters, setFilters] = useState<DashboardFilters>(() => defaultFilters());
+  const [orderPage, setOrderPage] = useState(1);
+  const [orderPageSize, setOrderPageSize] = useState(25);
+  const [orderSort, setOrderSort] = useState<DataQuery["orderSort"]>("order_date");
+  const [orderDirection, setOrderDirection] = useState<SortDirection>("desc");
+  const [orderSearchInput, setOrderSearchInput] = useState("");
+  const orderSearch = useDebouncedValue(orderSearchInput);
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [inventoryPageSize, setInventoryPageSize] = useState(25);
+  const [inventorySort, setInventorySort] = useState<DataQuery["inventorySort"]>("available_quantity");
+  const [inventoryDirection, setInventoryDirection] = useState<SortDirection>("asc");
+  const [inventorySearchInput, setInventorySearchInput] = useState("");
+  const inventorySearch = useDebouncedValue(inventorySearchInput);
+  const [inventoryStatus, setInventoryStatus] = useState("");
+
+  const query = useMemo<DataQuery>(
+    () => ({
+      filters,
+      orderPage,
+      orderPageSize,
+      orderSort,
+      orderDirection,
+      orderSearch,
+      inventoryPage,
+      inventoryPageSize,
+      inventorySort,
+      inventoryDirection,
+      inventorySearch,
+      inventoryStatus,
+    }),
+    [
+      filters,
+      orderPage,
+      orderPageSize,
+      orderSort,
+      orderDirection,
+      orderSearch,
+      inventoryPage,
+      inventoryPageSize,
+      inventorySort,
+      inventoryDirection,
+      inventorySearch,
+      inventoryStatus,
+    ],
+  );
+  const controller = useDashboardData(query, Boolean(auth.user));
+
+  function changeFilter(key: keyof DashboardFilters, value: string) {
+    setFilters((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "marketplace") next.store = "";
+      return next;
+    });
+    setOrderPage(1);
+    setInventoryPage(1);
+  }
+
+  function resetFilters() {
+    setFilters(defaultFilters());
+    setOrderSearchInput("");
+    setInventorySearchInput("");
+    setInventoryStatus("");
+    setOrderPage(1);
+    setInventoryPage(1);
+  }
+
+  function toggleOrderSort(next: DataQuery["orderSort"]) {
+    if (next === orderSort) setOrderDirection((direction) => (direction === "asc" ? "desc" : "asc"));
+    else {
+      setOrderSort(next);
+      setOrderDirection(next === "order_number" || next === "marketplace" || next === "status" ? "asc" : "desc");
+    }
+    setOrderPage(1);
+  }
+
+  function toggleInventorySort(next: DataQuery["inventorySort"]) {
+    if (next === inventorySort) setInventoryDirection((direction) => (direction === "asc" ? "desc" : "asc"));
+    else {
+      setInventorySort(next);
+      setInventoryDirection(next === "available_quantity" || next === "allocated_quantity" ? "desc" : "asc");
+    }
+    setInventoryPage(1);
+  }
+
+  function openLocation(location: string) {
+    changeFilter("location", location);
+    setActiveView("inventory");
+  }
+
+  const copy = VIEW_COPY[activeView];
+  const syncTime = controller.data.kpis.inventory_synced_at || controller.data.kpis.order_synced_at;
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <div className="brand-mark small">BE</div>
+          <div><strong>Command</strong><span>Center</span></div>
+        </div>
+        <nav>
+          {NAV_ITEMS.map((item) => (
+            <button key={item.id} className={activeView === item.id ? "active" : ""} onClick={() => setActiveView(item.id)}>
+              {item.icon}<span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-sync">
+          <CheckCircle2 size={21} />
+          <strong>Data tersinkron</strong>
+          <span>Jubelio → Supabase</span>
+          <small>{formatDateTime(syncTime)}</small>
+        </div>
+        <button className="logout-button" onClick={() => void auth.signOut()} disabled={auth.busy}>
+          <LogOut size={19} /> Keluar
+        </button>
+      </aside>
+
+      <main className="dashboard-main">
+        {controller.loading && !controller.initialLoading && <div className="top-loading-bar" />}
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">{copy.eyebrow}</p>
+            <h1>{copy.title}</h1>
+            <p>{copy.description}</p>
+          </div>
+          <div className="header-actions">
+            <div className="freshness">
+              <span>Terakhir dimuat</span>
+              <strong>{controller.lastUpdated ? formatDateTime(controller.lastUpdated.toISOString()) : "—"}</strong>
             </div>
-          </article>
-          <article className="panel alert-panel">
-            <div className="panel-head"><div><span>Prioritas hari ini</span><h2>Stok kritis</h2></div></div>
-            <div className="stock-list">
-              {(lowStock.length ? lowStock : [
-                { item_id: 1, products: { sku: "SKU-001", name: "Contoh produk" }, location_name: "Gudang Utama", available_quantity: 3 },
-                { item_id: 2, products: { sku: "SKU-002", name: "Contoh varian" }, location_name: "Toko", available_quantity: 5 },
-              ]).slice(0, 5).map((stock) => (
-                <div className="stock-item" key={`${stock.item_id}-${stock.location_name}`}>
-                  <div><strong>{stock.products?.name || `Produk #${stock.item_id}`}</strong><span>{stock.products?.sku || "Tanpa SKU"} · {stock.location_name}</span></div>
-                  <b>{Number(stock.available_quantity || 0)} unit</b>
-                </div>
-              ))}
-            </div>
-          </article>
-        </section>
+            <button
+              className="refresh-button"
+              disabled={controller.refreshing}
+              onClick={() => void controller.refreshFromJubelio()}
+              title="Tarik data terbaru langsung dari Jubelio"
+            >
+              <RefreshCw className={controller.refreshing ? "spin" : ""} size={19} />
+              {controller.refreshing ? "Menyinkronkan…" : "Refresh Jubelio"}
+            </button>
+          </div>
+        </header>
+
+        <FilterBar filters={filters} options={controller.data.filterOptions} onChange={changeFilter} onReset={resetFilters} />
+
+        {(controller.error || controller.refreshError) && (
+          <div className="error-banner">
+            <AlertCircle size={19} />
+            <span>{controller.refreshError || controller.error}</span>
+            <button onClick={() => void controller.reload()}>Coba lagi</button>
+          </div>
+        )}
+
+        {controller.initialLoading ? (
+          <div className="dashboard-loading"><LoaderCircle className="spin" size={30} /><strong>Memuat data nyata…</strong><p>KPI dan tabel sedang dihitung di Supabase.</p></div>
+        ) : (
+          <div className="view-content">
+            {activeView === "summary" && <SummaryView controller={controller} />}
+            {activeView === "orders" && (
+              <OrdersView
+                controller={controller}
+                search={orderSearchInput}
+                onSearch={(value) => {
+                  setOrderSearchInput(value);
+                  setOrderPage(1);
+                }}
+                page={orderPage}
+                pageSize={orderPageSize}
+                sort={orderSort}
+                direction={orderDirection}
+                onPage={setOrderPage}
+                onPageSize={(size) => { setOrderPageSize(size); setOrderPage(1); }}
+                onSort={toggleOrderSort}
+              />
+            )}
+            {activeView === "inventory" && (
+              <InventoryView
+                controller={controller}
+                search={inventorySearchInput}
+                status={inventoryStatus}
+                onSearch={(value) => {
+                  setInventorySearchInput(value);
+                  setInventoryPage(1);
+                }}
+                onStatus={(value) => { setInventoryStatus(value); setInventoryPage(1); }}
+                page={inventoryPage}
+                pageSize={inventoryPageSize}
+                sort={inventorySort}
+                direction={inventoryDirection}
+                onPage={setInventoryPage}
+                onPageSize={(size) => { setInventoryPageSize(size); setInventoryPage(1); }}
+                onSort={toggleInventorySort}
+              />
+            )}
+            {activeView === "locations" && <LocationsView controller={controller} onOpen={openLocation} />}
+          </div>
+        )}
       </main>
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  const auth = useAuth();
+  if (auth.loading) return <FullPageLoader />;
+  if (!auth.user || auth.mode === "recovery") return <AuthScreen auth={auth} />;
+  return <Dashboard auth={auth} />;
+}
