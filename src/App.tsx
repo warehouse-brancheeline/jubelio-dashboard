@@ -136,8 +136,34 @@ function App() {
     event.preventDefault();
     if (!supabase) return;
     setAuthError("");
+    setAuthMessage("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setAuthError("Email atau password belum benar.");
+  }
+
+  async function sendMagicLink() {
+    if (!supabase || !email.trim()) {
+      setAuthError("Isi email terlebih dahulu.");
+      return;
+    }
+    setAuthError("");
+    setAuthMessage("");
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: "https://warehouse-brancheeline.github.io/jubelio-dashboard/",
+        shouldCreateUser: false,
+      },
+    });
+    if (error) {
+      setAuthError(
+        error.status === 429
+          ? "Batas kirim email sedang aktif. Tunggu beberapa saat lalu coba lagi."
+          : error.message,
+      );
+      return;
+    }
+    setAuthMessage("Link masuk sudah dikirim. Silakan cek inbox atau folder spam.");
   }
 
   async function updatePassword(event: React.FormEvent) {
@@ -243,6 +269,7 @@ function App() {
           {authError && <p className="form-error">{authError}</p>}
           {authMessage && <p className="form-success">{authMessage}</p>}
           <button type="submit">Masuk dengan aman</button>
+          <button type="button" className="secondary-auth-button" onClick={sendMagicLink}>Kirim link masuk ke email</button>
           <small>Akun dibuat oleh administrator melalui Supabase.</small>
         </form>
       </main>
