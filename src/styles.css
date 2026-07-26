@@ -3,7 +3,7 @@
 :root { font-family: "DM Sans", sans-serif; color: #14231c; background: #f4f7f5; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 .page-loader { min-height: 100vh; display: grid; place-content: center; gap: 14px; color: #1e9365; font-weight: 700; }
 .page-loader svg { animation: pulse 1.2s infinite; margin: auto; }
@@ -63,7 +63,7 @@ header p:last-child { margin: 7px 0 0; color: #748178; }
 .demo-banner svg { width: 18px; }
 
 .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
-.metric { min-width: 0; padding: 22px; border: 1px solid #dfe7e3; border-radius: 18px; background: white; box-shadow: 0 8px 25px #17332608; }
+.metric { position: relative; min-width: 0; padding: 22px; border: 1px solid #dfe7e3; border-radius: 18px; background: white; box-shadow: 0 8px 25px #17332608; }
 .metric-icon { width: 38px; height: 38px; display: grid; place-items: center; margin-bottom: 24px; border-radius: 11px; background: #dff7ea; color: #17865a; }
 .metric-icon svg { width: 19px; }
 .metric-icon.amber { background: #fff0d1; color: #b87a0a; }
@@ -74,6 +74,21 @@ header p:last-child { margin: 7px 0 0; color: #748178; }
 .metric small { display: flex; align-items: center; gap: 4px; color: #1e9365; font-size: 11px; }
 .metric small svg { width: 14px; }
 .metric small.danger { color: #b55543; }
+.filter-trigger { position: absolute; top: 22px; right: 22px; width: 42px; height: 38px; display: grid; place-items: center; border: 1px solid #d7e2dc; border-radius: 10px; background: #f8fbf9; color: #315b48; }
+.filter-trigger svg { width: 18px; }
+.filter-trigger.has-filter { border-color: #16865a; background: #e2f7ec; color: #087443; }
+.filter-trigger b { position: absolute; top: -7px; right: -7px; width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: #153f2c; color: white; font-size: 10px; }
+.filter-panel { position: absolute; z-index: 20; top: 68px; left: 14px; width: min(350px, calc(100vw - 64px)); display: grid; gap: 13px; padding: 18px; border: 1px solid #d7e2dc; border-radius: 16px; background: white; box-shadow: 0 24px 70px #10271d2b; }
+.filter-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.filter-panel-head div { display: grid; gap: 2px; }
+.filter-panel-head span { color: #7c8b83; font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.filter-panel-head strong { font: 800 18px Manrope; }
+.filter-panel-head button { width: 28px; height: 28px; border: 0; border-radius: 8px; background: #f0f5f2; color: #536158; font-size: 20px; line-height: 1; }
+.filter-panel label { display: grid; gap: 6px; color: #5c6c63; font-size: 11px; font-weight: 700; }
+.filter-panel select, .filter-panel input { width: 100%; min-width: 0; padding: 10px 11px; border: 1px solid #d7e2dc; border-radius: 9px; outline: none; background: white; color: #233a2f; }
+.filter-panel select:focus, .filter-panel input:focus { border-color: #16865a; box-shadow: 0 0 0 3px #16865a17; }
+.date-filter { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.filter-panel .clear-filters { padding: 10px; border: 1px solid #b9cbc2; border-radius: 9px; background: white; color: #153f2c; font-size: 11px; font-weight: 800; }
 
 .chart-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; margin-top: 16px; }
 .panel { padding: 23px; border: 1px solid #dfe7e3; border-radius: 18px; background: white; box-shadow: 0 8px 25px #17332608; }

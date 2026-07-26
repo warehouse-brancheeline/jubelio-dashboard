@@ -11,6 +11,7 @@ import {
   PackageCheck,
   RefreshCw,
   Search,
+  SlidersHorizontal,
   ShoppingBag,
   Sparkles,
   Warehouse,
@@ -78,6 +79,12 @@ function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [platformFilter, setPlatformFilter] = useState("");
+  const [storeFilter, setStoreFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     if (!supabase) {
@@ -197,9 +204,33 @@ function App() {
   }
 
   const visibleOrders = orders.length ? orders : demoOrders;
-  const activeOrders = useMemo(
-    () => visibleOrders.filter((order) => !String(order.status).toUpperCase().includes("CANCEL")),
+  const warehouseOptions = useMemo(
+    () => [...new Set(stocks.map((stock) => stock.location_name).filter(Boolean) as string[])].sort(),
+    [stocks],
+  );
+  const platformOptions = useMemo(
+    () => [...new Set(visibleOrders.map((order) => order.marketplace).filter(Boolean) as string[])].sort(),
     [visibleOrders],
+  );
+  const storeOptions = useMemo(
+    () => [...new Set(
+      visibleOrders
+        .filter((order) => !platformFilter || order.marketplace === platformFilter)
+        .map((order) => order.store_name)
+        .filter(Boolean) as string[],
+    )].sort(),
+    [visibleOrders, platformFilter],
+  );
+  const activeOrders = useMemo(
+    () => visibleOrders.filter((order) => {
+      if (String(order.status).toUpperCase().includes("CANCEL")) return false;
+      if (platformFilter && order.marketplace !== platformFilter) return false;
+      if (storeFilter && order.store_name !== storeFilter) return false;
+      if (dateFrom && (!order.order_date || new Date(order.order_date) < new Date(`${dateFrom}T00:00:00`))) return false;
+      if (dateTo && (!order.order_date || new Date(order.order_date) > new Date(`${dateTo}T23:59:59.999`))) return false;
+      return true;
+    }),
+    [visibleOrders, platformFilter, storeFilter, dateFrom, dateTo],
   );
   const revenue = activeOrders.reduce((sum, order) => sum + Number(order.grand_total ?? 0), 0);
   const channelData = useMemo(() => {
@@ -219,7 +250,11 @@ function App() {
     });
     return [...days.entries()].slice(0, 14).reverse().map(([date, value]) => ({ date, value }));
   }, [activeOrders]);
-  const lowStock = stocks.filter((stock) => Number(stock.available_quantity ?? 0) <= 5);
+  const filteredStocks = stocks.filter(
+    (stock) => !warehouseFilter || stock.location_name === warehouseFilter,
+  );
+  const lowStock = filteredStocks.filter((stock) => Number(stock.available_quantity ?? 0) <= 5);
+  const activeFilterCount = [warehouseFilter, platformFilter, storeFilter, dateFrom || dateTo].filter(Boolean).length;
   const filteredOrders = activeOrders.filter((order) =>
     `${order.order_number} ${order.marketplace} ${order.store_name}`.toLowerCase().includes(query.toLowerCase()),
   ).slice(0, 8);
@@ -302,9 +337,49 @@ function App() {
         {!isConfigured && <div className="demo-banner"><AlertTriangle /> Mode pratinjau aktif. Tambahkan konfigurasi Supabase saat deployment untuk menampilkan data asli.</div>}
 
         <section className="metric-grid">
-          <article className="metric hero-metric"><div className="metric-icon"><CircleDollarSign /></div><span>Revenue terpantau</span><strong>{rupiah.format(revenue)}</strong><small><ArrowUpRight /> Data order selesai terbaru</small></article>
+          <article className="metric hero-metric">
+            <div className="metric-icon"><CircleDollarSign /></div>
+            <button className={`filter-trigger ${activeFilterCount ? "has-filter" : ""}`} onClick={() => setFiltersOpen((open) => !open)} aria-label="Buka filter dashboard">
+              <SlidersHorizontal />
+              {activeFilterCount > 0 && <b>{activeFilterCount}</b>}
+            </button>
+            {filtersOpen && (
+              <div className="filter-panel">
+                <div className="filter-panel-head">
+                  <div><span>Filter dashboard</span><strong>Sesuaikan data</strong></div>
+                  <button onClick={() => setFiltersOpen(false)} aria-label="Tutup filter">×</button>
+                </div>
+                <label>Gudang
+                  <select value={warehouseFilter} onChange={(event) => setWarehouseFilter(event.target.value)}>
+                    <option value="">Semua gudang</option>
+                    {warehouseOptions.map((warehouseName) => <option key={warehouseName} value={warehouseName}>{warehouseName}</option>)}
+                  </select>
+                </label>
+                <label>Platform penjualan
+                  <select value={platformFilter} onChange={(event) => { setPlatformFilter(event.target.value); setStoreFilter(""); }}>
+                    <option value="">Semua platform</option>
+                    {platformOptions.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
+                  </select>
+                </label>
+                <label>Toko marketplace
+                  <select value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)}>
+                    <option value="">Semua toko</option>
+                    {storeOptions.map((store) => <option key={store} value={store}>{store}</option>)}
+                  </select>
+                </label>
+                <div className="date-filter">
+                  <label>Dari tanggal<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
+                  <label>Sampai tanggal<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
+                </div>
+                <button className="clear-filters" onClick={() => { setWarehouseFilter(""); setPlatformFilter(""); setStoreFilter(""); setDateFrom(""); setDateTo(""); }}>Reset filter</button>
+              </div>
+            )}
+            <span>Revenue terpantau</span>
+            <strong>{rupiah.format(revenue)}</strong>
+            <small><ArrowUpRight /> Data order selesai terbaru</small>
+          </article>
           <article className="metric"><div className="metric-icon amber"><ShoppingBag /></div><span>Order dianalisis</span><strong>{compact.format(activeOrders.length)}</strong><small><ArrowUpRight /> Tidak termasuk pembatalan</small></article>
-          <article className="metric"><div className="metric-icon blue"><PackageCheck /></div><span>Baris stok</span><strong>{compact.format(stocks.length || 10276)}</strong><small><ArrowUpRight /> Dari 4 lokasi aktif</small></article>
+          <article className="metric"><div className="metric-icon blue"><PackageCheck /></div><span>Baris stok</span><strong>{compact.format(filteredStocks.length || (stocks.length ? 0 : 10276))}</strong><small><ArrowUpRight /> {warehouseFilter || "Dari 4 lokasi aktif"}</small></article>
           <article className="metric"><div className="metric-icon red"><AlertTriangle /></div><span>Stok perlu perhatian</span><strong>{compact.format(lowStock.length)}</strong><small className="danger"><ArrowDownRight /> Tersedia ≤ 5 unit</small></article>
         </section>
 
