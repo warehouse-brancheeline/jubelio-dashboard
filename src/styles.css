@@ -509,21 +509,11 @@ strong {
   border: 1px solid var(--line);
   border-radius: 18px;
   display: grid;
-  grid-template-columns: auto repeat(6, minmax(130px, 1fr)) auto;
+  grid-template-columns: repeat(6, minmax(130px, 1fr)) auto;
   align-items: end;
   gap: 12px;
   background: white;
   box-shadow: 0 8px 30px rgba(15, 57, 43, 0.04);
-}
-
-.filter-title {
-  align-self: center;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 5px;
-  color: var(--green-700);
-  font-weight: 800;
 }
 
 .filter-panel label {
@@ -651,7 +641,7 @@ strong {
 /* Cards and charts */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 18px;
 }
 
@@ -789,7 +779,7 @@ strong {
 .module-stat-row {
   margin-bottom: 18px;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 16px;
 }
 
@@ -956,6 +946,16 @@ tbody tr:hover {
 .status-pill.low_stock {
   color: var(--amber);
   background: var(--amber-soft);
+}
+
+.status-pill.processing {
+  color: #17658d;
+  background: #e4f2fb;
+}
+
+.status-pill.cancelled {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .row-action {
@@ -1161,9 +1161,6 @@ tbody tr:hover {
     grid-template-columns: repeat(4, minmax(150px, 1fr));
   }
 
-  .filter-title {
-    grid-column: 1 / -1;
-  }
 }
 
 @media (max-width: 1120px) {

@@ -53,7 +53,7 @@ Deno.serve(async (request: Request) => {
     fetch(`${supabaseUrl}/functions/v1/sync-jubelio-orders`, {
       method: "POST",
       headers: functionHeaders,
-      body: JSON.stringify({ pages: 5 }),
+      body: JSON.stringify({ pages: 5, active_pages: 20, detail_limit: 30 }),
     }),
     fetch(`${supabaseUrl}/functions/v1/sync-jubelio-inventory-v2`, {
       method: "POST",

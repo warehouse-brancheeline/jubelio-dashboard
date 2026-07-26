@@ -43,6 +43,12 @@ export function toRpcParams(filters: DashboardFilters) {
 
 export const EMPTY_KPIS: Kpis = {
   order_count: 0,
+  order_value: 0,
+  completed_order_count: 0,
+  completed_revenue: 0,
+  open_order_count: 0,
+  open_order_value: 0,
+  cancelled_order_count: 0,
   revenue: 0,
   last_order_at: null,
   order_synced_at: null,
@@ -64,6 +70,12 @@ export function normalizeKpis(input: Partial<Kpis> | null | undefined): Kpis {
   const row = input ?? {};
   return {
     order_count: Number(row.order_count ?? 0),
+    order_value: Number(row.order_value ?? 0),
+    completed_order_count: Number(row.completed_order_count ?? 0),
+    completed_revenue: Number(row.completed_revenue ?? row.revenue ?? 0),
+    open_order_count: Number(row.open_order_count ?? 0),
+    open_order_value: Number(row.open_order_value ?? 0),
+    cancelled_order_count: Number(row.cancelled_order_count ?? 0),
     revenue: Number(row.revenue ?? 0),
     last_order_at: row.last_order_at ?? null,
     order_synced_at: row.order_synced_at ?? null,

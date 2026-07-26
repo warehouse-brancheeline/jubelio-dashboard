@@ -25,6 +25,8 @@ const EMPTY_DATA: DashboardData = {
   channels: [],
   orders: [],
   orderCount: 0,
+  orderValue: 0,
+  completedRevenue: 0,
   orderRevenue: 0,
   inventory: [],
   inventoryCount: 0,
@@ -208,18 +210,23 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
 
       const kpis = normalizeKpis(kpiResult.data?.[0]);
       const totals = orderTotalsResult.data?.[0] as
-        | { order_count?: number | string; revenue?: number | string }
+        | {
+            order_count?: number | string;
+            order_value?: number | string;
+            completed_revenue?: number | string;
+            revenue?: number | string;
+          }
         | undefined;
 
       const nextData: DashboardData = {
         kpis,
         trend: normalizeNumberFields(
           (trendResult.data ?? []) as TrendPoint[],
-          ["order_count", "revenue"],
+          ["order_count", "order_value", "completed_revenue", "revenue"],
         ),
         channels: normalizeNumberFields(
           (channelResult.data ?? []) as ChannelPoint[],
-          ["order_count", "revenue"],
+          ["order_count", "order_value", "completed_revenue", "revenue"],
         ),
         orders: normalizeNumberFields((orderResult.data ?? []) as OrderRow[], [
           "order_id",
@@ -227,7 +234,9 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
           "grand_total",
         ]),
         orderCount: Number(orderResult.count ?? totals?.order_count ?? 0),
-        orderRevenue: Number(totals?.revenue ?? 0),
+        orderValue: Number(totals?.order_value ?? 0),
+        completedRevenue: Number(totals?.completed_revenue ?? totals?.revenue ?? 0),
+        orderRevenue: Number(totals?.order_value ?? totals?.revenue ?? 0),
         inventory: normalizeNumberFields((inventoryResult.data ?? []) as InventoryRow[], [
           "item_id",
           "location_id",
@@ -300,12 +309,27 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
 
   const loadOrderItems = useCallback(async (orderId: number): Promise<OrderItem[]> => {
     if (!supabase) throw new Error("Supabase belum siap.");
-    const result = await supabase
+    let result = await supabase
       .from("order_items")
       .select("order_id,item_id,sku,product_name,quantity,price,total")
       .eq("order_id", orderId)
       .order("product_name");
     if (result.error) throw result.error;
+    if (!result.data?.length) {
+      const detail = await supabase.functions.invoke("sync-jubelio-order-detail", {
+        body: { order_id: orderId },
+      });
+      if (detail.error) throw detail.error;
+      if (detail.data?.ok === false) {
+        throw new Error(detail.data?.error ?? "Detail item belum dapat diambil dari Jubelio.");
+      }
+      result = await supabase
+        .from("order_items")
+        .select("order_id,item_id,sku,product_name,quantity,price,total")
+        .eq("order_id", orderId)
+        .order("product_name");
+      if (result.error) throw result.error;
+    }
     return normalizeNumberFields((result.data ?? []) as OrderItem[], [
       "order_id",
       "item_id",

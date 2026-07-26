@@ -37,10 +37,13 @@ npm test
 npm run build
 ```
 
-## Sumber yang belum tersedia
+## Cakupan sumber
 
-- `order_items` masih kosong pada sumber saat implementasi, sehingga detail item dan
-  unit terjual belum dapat dihitung secara jujur.
-- Sinkronisasi order saat ini hanya mengisi status `COMPLETED`.
+- Sinkronisasi membaca order selesai serta tahapan aktif seperti siap diproses,
+  picking, packing, siap dikirim, dan dikirim.
+- Detail item diambil dari `GET /sales/orders/{id}` saat modal order dibuka dan
+  disimpan ke `order_items`.
+- Status aktif disegarkan otomatis setiap 30 menit dan juga saat tombol refresh
+  dashboard digunakan.
 - Incoming stock tidak tersedia dari payload inventory yang tersimpan.
 - Backfill histori order berjalan bertahap; progresnya ditampilkan pada Ringkasan.

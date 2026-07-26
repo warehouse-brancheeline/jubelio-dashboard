@@ -20,7 +20,6 @@ import {
   RotateCcw,
   Search,
   ShoppingBag,
-  SlidersHorizontal,
   Warehouse,
   X,
 } from "lucide-react";
@@ -252,10 +251,6 @@ function FilterBar({ filters, options, onChange, onReset }: FilterBarProps) {
 
   return (
     <section className="filter-panel" aria-label="Filter dashboard">
-      <div className="filter-title">
-        <SlidersHorizontal size={18} />
-        <span>Filter data</span>
-      </div>
       <label>
         Dari tanggal
         <span className="filter-input">
@@ -402,16 +397,29 @@ function SummaryView({
       <section className="kpi-grid">
         <KpiCard
           icon={<CircleDollarSign size={22} />}
-          label="Revenue"
-          value={formatCurrency(data.kpis.revenue)}
-          hint="Total grand total order pada filter"
+          label="Nilai order"
+          value={formatCurrency(data.kpis.order_value)}
+          hint="Order aktif + selesai, tanpa pembatalan"
         />
         <KpiCard
           icon={<ShoppingBag size={22} />}
-          label="Order"
+          label="Semua order"
           value={formatNumber(data.kpis.order_count)}
-          hint="Order tersimpan pada filter"
+          hint={`${formatNumber(data.kpis.cancelled_order_count)} dibatalkan pada filter`}
           tone="amber"
+        />
+        <KpiCard
+          icon={<LoaderCircle size={22} />}
+          label="Belum selesai"
+          value={formatNumber(data.kpis.open_order_count)}
+          hint={`${formatCurrency(data.kpis.open_order_value)} masih diproses`}
+          tone="blue"
+        />
+        <KpiCard
+          icon={<CheckCircle2 size={22} />}
+          label="Revenue selesai"
+          value={formatCurrency(data.kpis.completed_revenue)}
+          hint={`${formatNumber(data.kpis.completed_order_count)} order berstatus COMPLETED`}
         />
         <KpiCard
           icon={<PackageCheck size={22} />}
@@ -433,7 +441,7 @@ function SummaryView({
         <article className="panel chart-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">TREN REVENUE</p>
+              <p className="eyebrow">TREN NILAI ORDER</p>
               <h2>Performa harian</h2>
             </div>
             <span className="panel-meta">Zona waktu WITA</span>
@@ -464,11 +472,11 @@ function SummaryView({
                   />
                   <Tooltip
                     labelFormatter={(value) => formatBusinessDate(String(value))}
-                    formatter={(value) => [formatCurrency(Number(value)), "Revenue"]}
+                    formatter={(value) => [formatCurrency(Number(value)), "Nilai order"]}
                   />
                   <Area
                     type="monotone"
-                    dataKey="revenue"
+                    dataKey="order_value"
                     stroke="#14825a"
                     strokeWidth={3}
                     fill="url(#revenueFill)"
@@ -485,7 +493,7 @@ function SummaryView({
           <div className="panel-heading">
             <div>
               <p className="eyebrow">KONTRIBUSI CHANNEL</p>
-              <h2>Revenue per platform</h2>
+              <h2>Nilai order per platform</h2>
             </div>
           </div>
           {data.channels.length ? (
@@ -506,8 +514,8 @@ function SummaryView({
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), "Revenue"]} />
-                  <Bar dataKey="revenue" fill="#1f9467" radius={[0, 8, 8, 0]} />
+                  <Tooltip formatter={(value) => [formatCurrency(Number(value)), "Nilai order"]} />
+                  <Bar dataKey="order_value" fill="#1f9467" radius={[0, 8, 8, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -523,8 +531,8 @@ function SummaryView({
           <h2>Yang sudah dan belum tersedia</h2>
         </div>
         <ul>
-          <li>Order yang tersinkron saat ini hanya berstatus selesai/COMPLETED.</li>
-          <li>Detail item order belum tersedia karena tabel sumber `order_items` masih kosong.</li>
+          <li>Order aktif, selesai, dan pembatalan terbaru dibaca dari tahapan proses Jubelio.</li>
+          <li>Detail item diambil langsung dari Jubelio saat order dibuka, lalu disimpan untuk akses berikutnya.</li>
           <li>Incoming stock tidak dikirim oleh sumber saat ini; angka tidak direkayasa.</li>
           <li>Nilai stok negatif dari sumber dijaga minimum nol pada tampilan.</li>
         </ul>
@@ -667,8 +675,8 @@ function OrderDetail({
           </div>
         ) : (
           <EmptyState
-            title="Detail item belum tersinkron"
-            body="Order ini nyata, tetapi Jubelio sync saat ini belum mengisi tabel order_items."
+            title="Item tidak ditemukan"
+            body="Jubelio tidak mengembalikan baris item untuk order ini."
           />
         )}
       </section>
@@ -718,7 +726,8 @@ function OrdersView(props: OrdersViewProps) {
     <>
       <section className="module-stat-row">
         <div><span>Order sesuai filter</span><strong>{formatNumber(data.orderCount)}</strong></div>
-        <div><span>Revenue sesuai filter</span><strong>{formatCurrency(data.orderRevenue)}</strong></div>
+        <div><span>Nilai order sesuai filter</span><strong>{formatCurrency(data.orderValue)}</strong></div>
+        <div><span>Revenue selesai</span><strong>{formatCurrency(data.completedRevenue)}</strong></div>
         <div><span>Baris halaman ini</span><strong>{formatNumber(data.orders.length)}</strong></div>
       </section>
       <article className="panel table-panel">
@@ -757,7 +766,19 @@ function OrdersView(props: OrdersViewProps) {
                     <td>{order.marketplace}</td><td>{order.store_name || "—"}</td>
                     <td>{order.customer_name || "—"}</td>
                     <td>{order.location_name || <span className="muted">Tidak tersedia</span>}</td>
-                    <td><span className="status-pill complete">{order.status}</span></td>
+                    <td>
+                      <span
+                        className={`status-pill ${
+                          order.status === "COMPLETED"
+                            ? "complete"
+                            : ["CANCELLED", "CANCELED", "RETURNED"].includes(order.status)
+                              ? "cancelled"
+                              : "processing"
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                    </td>
                     <td className="number-cell">{formatCurrency(order.grand_total)}</td>
                     <td><button className="row-action" onClick={() => setSelected(order)} aria-label={`Lihat ${order.order_number}`}><Eye size={17} /></button></td>
                   </tr>

@@ -12,6 +12,12 @@ export type DashboardFilters = {
 
 export type Kpis = {
   order_count: number;
+  order_value: number;
+  completed_order_count: number;
+  completed_revenue: number;
+  open_order_count: number;
+  open_order_value: number;
+  cancelled_order_count: number;
   revenue: number;
   last_order_at: string | null;
   order_synced_at: string | null;
@@ -32,12 +38,16 @@ export type Kpis = {
 export type TrendPoint = {
   business_date: string;
   order_count: number;
+  order_value: number;
+  completed_revenue: number;
   revenue: number;
 };
 
 export type ChannelPoint = {
   marketplace: string;
   order_count: number;
+  order_value: number;
+  completed_revenue: number;
   revenue: number;
 };
 
@@ -122,6 +132,8 @@ export type DashboardData = {
   channels: ChannelPoint[];
   orders: OrderRow[];
   orderCount: number;
+  orderValue: number;
+  completedRevenue: number;
   orderRevenue: number;
   inventory: InventoryRow[];
   inventoryCount: number;
