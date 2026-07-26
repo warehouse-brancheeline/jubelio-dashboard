@@ -84,10 +84,31 @@ function App() {
       setLoading(false);
       return;
     }
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+
+    async function initializeAuth() {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      const accessToken = hash.get("access_token");
+      const refreshToken = hash.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase!.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (error) {
+          setAuthError("Tautan pemulihan sudah kedaluwarsa. Kirim ulang email recovery.");
+        } else {
+          setSession(data.session);
+          setIsPasswordRecovery(true);
+        }
+      } else {
+        const { data } = await supabase!.auth.getSession();
+        setSession(data.session);
+      }
       setLoading(false);
-    });
+    }
+
+    initializeAuth();
     const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
