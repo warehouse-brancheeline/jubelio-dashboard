@@ -66,7 +66,13 @@ function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
+    () => window.location.hash.includes("type=recovery"),
+  );
   const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -82,7 +88,10 @@ function App() {
       setSession(data.session);
       setLoading(false);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    const { data } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      setSession(nextSession);
+      if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
@@ -108,6 +117,36 @@ function App() {
     setAuthError("");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) setAuthError("Email atau password belum benar.");
+  }
+
+  async function updatePassword(event: React.FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+    setAuthError("");
+    setAuthMessage("");
+
+    if (newPassword.length < 8) {
+      setAuthError("Password baru minimal 8 karakter.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setAuthError("Konfirmasi password belum sama.");
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setAuthError(error.message || "Password belum berhasil diperbarui.");
+      return;
+    }
+
+    await supabase.auth.signOut();
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setSession(null);
+    setIsPasswordRecovery(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setAuthMessage("Password berhasil dibuat. Silakan masuk dengan password baru.");
   }
 
   const visibleOrders = orders.length ? orders : demoOrders;
@@ -140,6 +179,28 @@ function App() {
 
   if (loading) return <div className="page-loader"><Sparkles /> Menyiapkan command center…</div>;
 
+  if (isConfigured && isPasswordRecovery) {
+    return (
+      <main className="auth-shell">
+        <section className="auth-story">
+          <div className="brand-mark"><span>BE</span></div>
+          <p className="eyebrow">Pemulihan akun</p>
+          <h1>Buat password baru.</h1>
+          <p>Gunakan password yang kuat dan hanya Anda yang mengetahuinya.</p>
+        </section>
+        <form className="auth-card" onSubmit={updatePassword}>
+          <p className="eyebrow">Langkah terakhir</p>
+          <h2>Atur password baru</h2>
+          <label>Password baru<input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" required /></label>
+          <label>Ulangi password<input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} minLength={8} autoComplete="new-password" required /></label>
+          {authError && <p className="form-error">{authError}</p>}
+          <button type="submit">Simpan password baru</button>
+          <small>Setelah tersimpan, Anda akan kembali ke halaman login.</small>
+        </form>
+      </main>
+    );
+  }
+
   if (isConfigured && !session) {
     return (
       <main className="auth-shell">
@@ -159,6 +220,7 @@ function App() {
           <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
           <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
           {authError && <p className="form-error">{authError}</p>}
+          {authMessage && <p className="form-success">{authMessage}</p>}
           <button type="submit">Masuk dengan aman</button>
           <small>Akun dibuat oleh administrator melalui Supabase.</small>
         </form>
