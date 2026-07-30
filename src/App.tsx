@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Search,
   ShoppingBag,
+  TrendingUp,
   Warehouse,
   X,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import {
 } from "recharts";
 import { useAuth, type AuthController } from "./hooks/useAuth";
 import { useDashboardData } from "./hooks/useDashboardData";
+import { ForecastView } from "./ForecastView";
 import {
   buildCsv,
   businessDate,
@@ -816,6 +818,7 @@ type InventoryViewProps = {
   onPage: (page: number) => void;
   onPageSize: (size: number) => void;
   onSort: (sort: DataQuery["inventorySort"]) => void;
+  onForecast: () => void;
 };
 
 function InventoryView(props: InventoryViewProps) {
@@ -863,6 +866,9 @@ function InventoryView(props: InventoryViewProps) {
           </select>
           <button className="secondary-button" onClick={exportRows} disabled={!data.inventory.length}>
             <Download size={17} /> Ekspor halaman CSV
+          </button>
+          <button className="primary-button compact" onClick={props.onForecast}>
+            <TrendingUp size={17} /> Forecast Restock
           </button>
         </div>
         {data.inventory.length ? (
@@ -947,6 +953,7 @@ const NAV_ITEMS: { id: ViewName; label: string; icon: React.ReactNode }[] = [
   { id: "summary", label: "Ringkasan", icon: <LayoutDashboard size={20} /> },
   { id: "orders", label: "Order", icon: <ShoppingBag size={20} /> },
   { id: "inventory", label: "Persediaan", icon: <Boxes size={20} /> },
+  { id: "forecast", label: "Forecast Restock", icon: <TrendingUp size={20} /> },
   { id: "locations", label: "Lokasi", icon: <Warehouse size={20} /> },
 ];
 
@@ -965,6 +972,11 @@ const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description:
     eyebrow: "PERSEDIAAN",
     title: "Stok per produk dan gudang",
     description: "On hand, tersedia, dan alokasi tanpa nilai negatif di tampilan.",
+  },
+  forecast: {
+    eyebrow: "PERENCANAAN STOK",
+    title: "Forecast Restock",
+    description: "Rekomendasi pembelian dari tren unit terjual, posisi stok, dan lead time.",
   },
   locations: {
     eyebrow: "JARINGAN GUDANG",
@@ -1117,7 +1129,9 @@ function Dashboard({ auth }: { auth: AuthController }) {
           </div>
         </header>
 
-        <FilterBar filters={filters} options={controller.data.filterOptions} onChange={changeFilter} onReset={resetFilters} />
+        {activeView !== "forecast" && (
+          <FilterBar filters={filters} options={controller.data.filterOptions} onChange={changeFilter} onReset={resetFilters} />
+        )}
 
         {(controller.error || controller.refreshError) && (
           <div className="error-banner">
@@ -1166,6 +1180,13 @@ function Dashboard({ auth }: { auth: AuthController }) {
                 onPage={setInventoryPage}
                 onPageSize={(size) => { setInventoryPageSize(size); setInventoryPage(1); }}
                 onSort={toggleInventorySort}
+                onForecast={() => setActiveView("forecast")}
+              />
+            )}
+            {activeView === "forecast" && (
+              <ForecastView
+                enabled={Boolean(auth.user)}
+                locations={controller.data.filterOptions.locations}
               />
             )}
             {activeView === "locations" && <LocationsView controller={controller} onOpen={openLocation} />}

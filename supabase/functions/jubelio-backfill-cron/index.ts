@@ -26,13 +26,19 @@ Deno.serve(async (request: Request) => {
   }
 
   const body = await request.json().catch(() => ({}));
-  const dashboardSync = body?.action === "dashboard";
-  const functionName = dashboardSync
-    ? "sync-jubelio-orders"
-    : "sync-jubelio-orders-backfill";
-  const payload = dashboardSync
-    ? { pages: 5, active_pages: 20, detail_limit: 30 }
-    : { pages: 10 };
+  const action = String(body?.action ?? "orders");
+  const functionName =
+    action === "dashboard"
+      ? "sync-jubelio-orders"
+      : action === "forecast_items"
+        ? "sync-jubelio-forecast-items"
+        : "sync-jubelio-orders-backfill";
+  const payload =
+    action === "dashboard"
+      ? { pages: 5, active_pages: 20, detail_limit: 30 }
+      : action === "forecast_items"
+        ? { months: 3, batch_size: 80 }
+        : { pages: 10 };
 
   const response = await fetch(`${url}/functions/v1/${functionName}`, {
     method: "POST",

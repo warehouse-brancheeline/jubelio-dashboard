@@ -47,3 +47,27 @@ npm run build
   dashboard digunakan.
 - Incoming stock tidak tersedia dari payload inventory yang tersimpan.
 - Backfill histori order berjalan bertahap; progresnya ditampilkan pada Ringkasan.
+
+## Forecast Restock
+
+Menu Persediaan memiliki halaman Forecast Restock dengan periode 1, 2, 3 bulan
+atau rentang tanggal khusus. Perhitungan hanya memakai order selesai, bukan
+transaksi internal, batal, retur, atau item batal.
+
+```text
+avg_daily_sales = unit normal / hari kalender
+trend_factor = 1 + clamp(trend, -30%, +50%)
+net_stock = stok tersedia + incoming - teralokasi
+reorder_point = kebutuhan lead time + safety stock
+target_stock = avg_daily_sales x (lead time + coverage days) x trend_factor + safety stock
+final_restock = ceil(max(0, target_stock - net_stock) / MOQ) x MOQ
+```
+
+Transaksi besar ditandai dengan batas `Q3 + 1,5 x IQR`. Jumlahnya dibatasi pada
+forecast normal dan tetap dihitung penuh pada forecast aktual. Lead time, MOQ,
+safety stock, dan incoming dapat diatur per produk. Jika belum diisi, dashboard
+menampilkan dan memakai nilai default.
+
+Detail item historis diisi bertahap sebanyak maksimal 80 order setiap 10 menit.
+Coverage dan confidence ditampilkan agar hasil tidak terlihat lebih pasti daripada
+data yang tersedia.

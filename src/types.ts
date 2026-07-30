@@ -1,4 +1,4 @@
-export type ViewName = "summary" | "orders" | "inventory" | "locations";
+export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations";
 export type SortDirection = "asc" | "desc";
 
 export type DashboardFilters = {
@@ -139,4 +139,113 @@ export type DashboardData = {
   inventoryCount: number;
   locations: LocationRow[];
   filterOptions: FilterOptions;
+};
+
+export type ForecastPeriod = "1_month" | "2_months" | "3_months" | "custom";
+
+export type ForecastParameters = {
+  period: ForecastPeriod;
+  dateFrom: string;
+  dateTo: string;
+  location: string;
+  defaultLeadTimeDays: number;
+  safetyStockDays: number;
+  coverageDays: number;
+  serviceLevel: "90" | "95" | "97.5" | "99";
+  trendFloorPercent: number;
+  trendCapPercent: number;
+  defaultMoq: number;
+  page: number;
+  pageSize: number;
+  search: string;
+  priority: string;
+};
+
+export type ForecastSummary = {
+  product_count: number;
+  critical_count: number;
+  high_count: number;
+  medium_count: number;
+  low_count: number;
+  no_restock_count: number;
+  recommended_units: number;
+  low_confidence_count: number;
+};
+
+export type ForecastCoverage = {
+  date_from: string;
+  date_to: string;
+  analysis_days: number;
+  completed_orders: number;
+  orders_with_items: number;
+  coverage_percentage: number;
+  location: string | null;
+};
+
+export type ForecastAssumptions = {
+  completed_statuses: string[];
+  internal_transactions_excluded: boolean;
+  outlier_method: string;
+  default_lead_time_days: number;
+  safety_stock_days: number;
+  coverage_days: number;
+  z_score: number;
+  trend_floor: number;
+  trend_cap: number;
+  default_moq: number;
+  incoming_source: string;
+};
+
+export type ForecastRow = {
+  item_id: number;
+  sku: string;
+  product_name: string;
+  stock_available: number;
+  incoming_quantity: number;
+  allocated_quantity: number;
+  net_stock: number;
+  total_units_sold: number;
+  normal_units_sold: number;
+  avg_daily_sales: number;
+  avg_weekly_sales: number;
+  avg_monthly_sales: number;
+  transaction_count: number;
+  unique_customers: number;
+  active_sales_days: number;
+  trend_percentage: number | null;
+  trend_status: string;
+  trend_factor: number;
+  lead_time_days: number;
+  safety_stock: number;
+  reorder_point: number;
+  demand_30_days: number;
+  days_until_stockout: number | null;
+  estimated_stockout_date: string | null;
+  recommended_restock: number;
+  actual_restock: number;
+  priority: "Kritis" | "Tinggi" | "Sedang" | "Rendah" | "Tidak perlu restock";
+  confidence_level: "Tinggi" | "Sedang" | "Rendah";
+  recommendation_reason: string;
+  largest_customer_percentage: number;
+  outlier_transactions: number;
+  outlier_units: number;
+  daily_stddev: number;
+  moq: number;
+  has_product_settings: boolean;
+  stock_synced_at: string | null;
+};
+
+export type ForecastData = {
+  summary: ForecastSummary;
+  coverage: ForecastCoverage;
+  assumptions: ForecastAssumptions;
+  rows: ForecastRow[];
+};
+
+export type ForecastProductSettings = {
+  item_id: number;
+  lead_time_days: number | null;
+  moq: number | null;
+  safety_stock: number | null;
+  incoming_quantity: number | null;
 };
