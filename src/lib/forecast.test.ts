@@ -4,7 +4,9 @@ import {
   forecastDateRange,
   forecastRpcParams,
   normalizeForecast,
+  sortForecastRows,
 } from "./forecast";
+import type { ForecastRow } from "../types";
 
 describe("parameter forecast", () => {
   const date = new Date("2026-07-30T04:00:00.000Z");
@@ -44,5 +46,30 @@ describe("parameter forecast", () => {
     expect(data.summary.product_count).toBe(12);
     expect(data.rows[0].recommended_restock).toBe(10);
     expect(data.rows[0].days_until_stockout).toBe(4.5);
+  });
+
+  it("mengurutkan angka, teks, prioritas, dan nilai kosong", () => {
+    const row = (overrides: Partial<ForecastRow>) => ({
+      sku: "",
+      product_name: "",
+      priority: "Rendah",
+      confidence_level: "Rendah",
+      estimated_stockout_date: null,
+      ...overrides,
+    }) as ForecastRow;
+    const rows = [
+      row({ sku: "SKU-10", stock_available: 2, priority: "Rendah" }),
+      row({ sku: "SKU-2", stock_available: 20, priority: "Kritis", estimated_stockout_date: "2026-08-01" }),
+      row({ sku: "SKU-1", stock_available: 5, priority: "Tinggi", estimated_stockout_date: "2026-07-31" }),
+    ];
+
+    expect(sortForecastRows(rows, "sku", "asc").map((item) => item.sku))
+      .toEqual(["SKU-1", "SKU-2", "SKU-10"]);
+    expect(sortForecastRows(rows, "stock_available", "desc").map((item) => item.stock_available))
+      .toEqual([20, 5, 2]);
+    expect(sortForecastRows(rows, "priority", "asc").map((item) => item.priority))
+      .toEqual(["Kritis", "Tinggi", "Rendah"]);
+    expect(sortForecastRows(rows, "estimated_stockout_date", "asc").map((item) => item.sku))
+      .toEqual(["SKU-1", "SKU-2", "SKU-10"]);
   });
 });

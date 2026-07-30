@@ -13,6 +13,85 @@ export const SERVICE_Z_SCORE: Record<ForecastParameters["serviceLevel"], number>
   "99": 2.33,
 };
 
+export type ForecastSortDirection = "asc" | "desc";
+
+export type ForecastSortKey =
+  | "sku"
+  | "product_name"
+  | "stock_available"
+  | "incoming_quantity"
+  | "allocated_quantity"
+  | "net_stock"
+  | "total_units_sold"
+  | "avg_daily_sales"
+  | "avg_monthly_sales"
+  | "transaction_count"
+  | "unique_customers"
+  | "trend_percentage"
+  | "trend_status"
+  | "lead_time_days"
+  | "safety_stock"
+  | "reorder_point"
+  | "demand_30_days"
+  | "estimated_stockout_date"
+  | "recommended_restock"
+  | "priority"
+  | "confidence_level"
+  | "recommendation_reason";
+
+const PRIORITY_ORDER: Record<ForecastRow["priority"], number> = {
+  Kritis: 1,
+  Tinggi: 2,
+  Sedang: 3,
+  Rendah: 4,
+  "Tidak perlu restock": 5,
+};
+
+const CONFIDENCE_ORDER: Record<ForecastRow["confidence_level"], number> = {
+  Tinggi: 1,
+  Sedang: 2,
+  Rendah: 3,
+};
+
+const TREND_ORDER: Record<string, number> = {
+  Naik: 1,
+  Stabil: 2,
+  Turun: 3,
+  "Produk baru atau mulai diminati": 4,
+};
+
+function forecastSortValue(row: ForecastRow, key: ForecastSortKey): number | string | null {
+  if (key === "priority") return PRIORITY_ORDER[row.priority];
+  if (key === "confidence_level") return CONFIDENCE_ORDER[row.confidence_level];
+  if (key === "trend_status") return TREND_ORDER[row.trend_status] ?? row.trend_status;
+  return row[key];
+}
+
+export function sortForecastRows(
+  rows: ForecastRow[],
+  key: ForecastSortKey,
+  direction: ForecastSortDirection,
+): ForecastRow[] {
+  const multiplier = direction === "asc" ? 1 : -1;
+  return [...rows].sort((left, right) => {
+    const leftValue = forecastSortValue(left, key);
+    const rightValue = forecastSortValue(right, key);
+
+    if (leftValue == null && rightValue == null) return 0;
+    if (leftValue == null) return 1;
+    if (rightValue == null) return -1;
+
+    if (typeof leftValue === "number" && typeof rightValue === "number") {
+      return (leftValue - rightValue) * multiplier;
+    }
+
+    return String(leftValue).localeCompare(String(rightValue), "id-ID", {
+      numeric: true,
+      sensitivity: "base",
+    }) * multiplier;
+  });
+}
+
 export function forecastDateRange(
   period: Exclude<ForecastPeriod, "custom">,
   date = new Date(),
@@ -149,4 +228,3 @@ export function formatDecimal(value: number, maximumFractionDigits = 2): string 
     maximumFractionDigits,
   }).format(value);
 }
-

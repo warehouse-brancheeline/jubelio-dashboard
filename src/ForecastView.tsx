@@ -1,6 +1,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Calculator,
   ChevronLeft,
   ChevronRight,
@@ -16,6 +19,11 @@ import {
   defaultForecastParameters,
   forecastDateRange,
   formatDecimal,
+  sortForecastRows,
+} from "./lib/forecast";
+import type {
+  ForecastSortDirection,
+  ForecastSortKey,
 } from "./lib/forecast";
 import {
   buildCsv,
@@ -53,6 +61,44 @@ function confidenceClass(confidence: string) {
   if (confidence === "Tinggi") return "high";
   if (confidence === "Sedang") return "medium";
   return "low";
+}
+
+function ForecastSortHeader({
+  label,
+  column,
+  active,
+  direction,
+  number,
+  onSort,
+}: {
+  label: string;
+  column: ForecastSortKey;
+  active: ForecastSortKey;
+  direction: ForecastSortDirection;
+  number?: boolean;
+  onSort: (column: ForecastSortKey) => void;
+}) {
+  const isActive = active === column;
+  return (
+    <th
+      className={number ? "number-cell" : undefined}
+      aria-sort={isActive ? (direction === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button
+        type="button"
+        className={isActive ? "sort-button active" : "sort-button"}
+        onClick={() => onSort(column)}
+        title={`Urutkan berdasarkan ${label}`}
+      >
+        {label}
+        {isActive
+          ? direction === "asc"
+            ? <ArrowUp size={14} />
+            : <ArrowDown size={14} />
+          : <ArrowUpDown size={14} />}
+      </button>
+    </th>
+  );
 }
 
 function ProductSettingsModal({
@@ -133,8 +179,14 @@ export function ForecastView({ enabled, locations }: Props) {
   const [draft, setDraft] = useState<ForecastParameters>(initial);
   const [applied, setApplied] = useState<ForecastParameters>(initial);
   const [selected, setSelected] = useState<ForecastRow | null>(null);
+  const [sortKey, setSortKey] = useState<ForecastSortKey>("priority");
+  const [sortDirection, setSortDirection] = useState<ForecastSortDirection>("asc");
   const forecast = useForecastData(applied, enabled);
   const { data } = forecast;
+  const sortedRows = useMemo(
+    () => sortForecastRows(data.rows, sortKey, sortDirection),
+    [data.rows, sortKey, sortDirection],
+  );
 
   function setField<K extends keyof ForecastParameters>(
     key: K,
@@ -163,6 +215,15 @@ export function ForecastView({ enabled, locations }: Props) {
     setDraft((current) => ({ ...current, page }));
   }
 
+  function changeSort(column: ForecastSortKey) {
+    if (sortKey === column) {
+      setSortDirection((current) => current === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(column);
+    setSortDirection("asc");
+  }
+
   function exportRows() {
     const csv = buildCsv(
       [
@@ -174,7 +235,7 @@ export function ForecastView({ enabled, locations }: Props) {
         "Estimasi stok habis", "Restock normal", "Restock aktual",
         "Prioritas", "Confidence", "Alasan",
       ],
-      data.rows.map((row) => [
+      sortedRows.map((row) => [
         row.sku, row.product_name, row.stock_available, row.incoming_quantity,
         row.allocated_quantity, row.net_stock, row.total_units_sold,
         row.avg_daily_sales, row.avg_monthly_sales, row.transaction_count,
@@ -267,18 +328,39 @@ export function ForecastView({ enabled, locations }: Props) {
             <option>Kritis</option><option>Tinggi</option><option>Sedang</option><option>Rendah</option><option>Tidak perlu restock</option>
           </select>
           <button className="secondary-button" onClick={apply}>Terapkan</button>
-          <button className="secondary-button" onClick={exportRows} disabled={!data.rows.length}><Download size={17} /> Ekspor CSV</button>
+          <button className="secondary-button" onClick={exportRows} disabled={!sortedRows.length}><Download size={17} /> Ekspor CSV</button>
         </div>
         {forecast.loading ? (
           <div className="forecast-loading"><LoaderCircle className="spin" size={28} /><strong>Menghitung forecast...</strong></div>
-        ) : data.rows.length ? (
+        ) : sortedRows.length ? (
           <div className="table-scroll forecast-table-scroll">
             <table className="forecast-table">
               <thead><tr>
-                <th>SKU</th><th>Nama produk</th><th className="number-cell">Stok tersedia</th><th className="number-cell">Dalam perjalanan</th><th className="number-cell">Dialokasikan</th><th className="number-cell">Stok bersih</th><th className="number-cell">Unit terjual</th><th className="number-cell">Rata-rata/hari</th><th className="number-cell">Rata-rata/bulan</th><th className="number-cell">Transaksi</th><th className="number-cell">Customer unik</th><th className="number-cell">Tren</th><th>Status tren</th><th className="number-cell">Lead time</th><th className="number-cell">Safety stock</th><th className="number-cell">Reorder point</th><th className="number-cell">Kebutuhan 30 hari</th><th>Estimasi stok habis</th><th className="number-cell">Rekomendasi restock</th><th>Prioritas</th><th>Confidence</th><th>Alasan rekomendasi</th>
+                <ForecastSortHeader label="SKU" column="sku" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Nama produk" column="product_name" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Stok tersedia" column="stock_available" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Dalam perjalanan" column="incoming_quantity" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Dialokasikan" column="allocated_quantity" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Stok bersih" column="net_stock" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Unit terjual" column="total_units_sold" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Rata-rata/hari" column="avg_daily_sales" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Rata-rata/bulan" column="avg_monthly_sales" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Transaksi" column="transaction_count" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Customer unik" column="unique_customers" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Tren" column="trend_percentage" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Status tren" column="trend_status" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Lead time" column="lead_time_days" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Safety stock" column="safety_stock" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Reorder point" column="reorder_point" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Kebutuhan 30 hari" column="demand_30_days" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Estimasi stok habis" column="estimated_stockout_date" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Rekomendasi restock" column="recommended_restock" active={sortKey} direction={sortDirection} number onSort={changeSort} />
+                <ForecastSortHeader label="Prioritas" column="priority" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Confidence" column="confidence_level" active={sortKey} direction={sortDirection} onSort={changeSort} />
+                <ForecastSortHeader label="Alasan rekomendasi" column="recommendation_reason" active={sortKey} direction={sortDirection} onSort={changeSort} />
               </tr></thead>
               <tbody>
-                {data.rows.map((row) => (
+                {sortedRows.map((row) => (
                   <tr key={row.item_id}>
                     <td><button className="sku-setting-button" onClick={() => setSelected(row)} title="Atur lead time, MOQ, safety stock, dan incoming"><strong>{row.sku}</strong><Settings2 size={14} /></button></td>
                     <td><strong>{row.product_name}</strong>{row.largest_customer_percentage > 50 && <small className="table-warning">Satu customer menyumbang {formatDecimal(row.largest_customer_percentage, 1)}%</small>}</td>
