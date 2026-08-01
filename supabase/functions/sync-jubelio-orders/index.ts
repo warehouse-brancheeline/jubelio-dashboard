@@ -344,6 +344,17 @@ Deno.serve(async (request: Request) => {
         saved: stage.saved,
         truncated: "truncated" in stage ? stage.truncated : undefined,
       }));
+    const factsRefresh = await db.rpc("refresh_dashboard_order_facts");
+    if (factsRefresh.error) {
+      stageIssues.push({
+        stage: "dashboard_order_facts",
+        error: factsRefresh.error.message,
+        pagesRead: undefined,
+        totalCount: undefined,
+        saved: 0,
+        truncated: undefined,
+      });
+    }
     await db
       .from("sync_logs")
       .update({
