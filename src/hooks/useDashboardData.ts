@@ -102,7 +102,6 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
         .from("dashboard_orders_operational")
         .select(
           "order_id,order_number,invoice_number,tracking_number,order_date,business_date,created_at,processed_at,shipped_at,completed_at,settlement_at,marketplace,store_name,customer_name,recipient_name,raw_status,status_group,status_label,settlement_status,settlement_label,settlement_amount,subtotal,grand_total,fee_amount,location_id,location_name,shipper,sync_stage,synced_at",
-          { count: "exact" },
         )
         .gte("business_date", query.filters.dateFrom)
         .lte("business_date", query.filters.dateTo)
@@ -244,7 +243,7 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
           "subtotal",
           "grand_total",
         ]),
-        orderCount: Number(orderResult.count ?? totals?.order_count ?? 0),
+        orderCount: Number(totals?.order_count ?? 0),
         orderValue: Number(totals?.order_value ?? 0),
         completedRevenue: Number(totals?.completed_revenue ?? totals?.revenue ?? 0),
         orderRevenue: Number(totals?.order_value ?? totals?.revenue ?? 0),

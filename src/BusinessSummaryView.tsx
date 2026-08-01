@@ -86,13 +86,15 @@ export function BusinessSummaryView({ controller, onOrders, onInventory }: Props
     "Cair": { settlementStatus: "SETTLED" },
   };
 
+  if (controller.error && !controller.lastUpdated) return null;
+
   return (
     <div className="business-summary">
-      {!k.backfill_completed && (
+      {!k.backfill_completed && k.backfill_total > 0 && (
         <div className="coverage-banner"><AlertCircle size={20} /><div><strong>Histori order masih dilengkapi</strong><p>{formatNumber(k.backfill_loaded)} dari sekitar {formatNumber(k.backfill_total)} order tersedia ({coverage.toFixed(1)}%).</p></div><div className="coverage-progress"><span style={{ width: `${coverage}%` }} /></div></div>
       )}
 
-      {(!summary.quality.status_reconciled || summary.quality.unknown_status_count > 0) && (
+      {summary.quality.unknown_status_count > 0 && (
         <div className="quality-alert"><AlertCircle size={18} /><span>Ada {formatNumber(summary.quality.unknown_status_count)} status yang belum dikenali. Angka perlu ditinjau.</span></div>
       )}
 
