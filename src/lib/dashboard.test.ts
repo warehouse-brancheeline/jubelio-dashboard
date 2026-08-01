@@ -27,6 +27,7 @@ describe("filter dashboard", () => {
         store: "",
         location: "",
         status: "COMPLETED",
+        settlementStatus: "SETTLED",
       }),
     ).toEqual({
       p_date_from: "2026-07-01",
@@ -34,7 +35,8 @@ describe("filter dashboard", () => {
       p_marketplace: "SHOPEE",
       p_store: null,
       p_location: null,
-      p_status: "COMPLETED",
+      p_status_group: "COMPLETED",
+      p_settlement_status: "SETTLED",
     });
   });
 

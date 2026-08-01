@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   dataAfterLoad,
+  EMPTY_OPERATIONAL,
   EMPTY_KPIS,
   isLatestRequest,
   normalizeKpis,
   normalizeNumberFields,
+  normalizeOperationalSummary,
   toRpcParams,
 } from "../lib/dashboard";
 import { supabase } from "../supabase";
@@ -16,7 +18,6 @@ import type {
   LocationRow,
   OrderItem,
   OrderRow,
-  TrendPoint,
 } from "../types";
 
 const EMPTY_DATA: DashboardData = {
@@ -35,8 +36,12 @@ const EMPTY_DATA: DashboardData = {
     marketplaces: [],
     stores: [],
     statuses: [],
+    statusLabels: {},
+    settlementStatuses: [],
+    settlementLabels: {},
     locations: [],
   },
+  operational: EMPTY_OPERATIONAL,
 };
 
 function errorMessage(error: unknown): string {
@@ -76,10 +81,14 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
   const requestRef = useRef(0);
   const hasLoadedRef = useRef(false);
   const refreshLockRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (): Promise<boolean> => {
     if (!enabled || !supabase) return false;
     const requestId = ++requestRef.current;
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
     if (!hasLoadedRef.current) setInitialLoading(true);
     setLoading(true);
     setError(null);
@@ -90,14 +99,14 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
 
     try {
       let ordersRequest = supabase
-        .from("dashboard_orders")
+        .from("dashboard_orders_operational")
         .select(
-          "order_id,order_number,order_date,business_date,marketplace,store_name,customer_name,status,subtotal,grand_total,location_name,synced_at",
+          "order_id,order_number,invoice_number,tracking_number,order_date,business_date,created_at,processed_at,shipped_at,completed_at,settlement_at,marketplace,store_name,customer_name,recipient_name,raw_status,status_group,status_label,settlement_status,settlement_label,settlement_amount,subtotal,grand_total,fee_amount,location_id,location_name,shipper,sync_stage,synced_at",
           { count: "exact" },
         )
         .gte("business_date", query.filters.dateFrom)
         .lte("business_date", query.filters.dateTo)
-        .order(query.orderSort, { ascending: query.orderDirection === "asc" })
+        .order(query.orderSort === "status" ? "status_group" : query.orderSort, { ascending: query.orderDirection === "asc" })
         .range(orderFrom, orderFrom + query.orderPageSize - 1);
       if (query.filters.marketplace) {
         ordersRequest = ordersRequest.eq("marketplace", query.filters.marketplace);
@@ -106,7 +115,10 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
       if (query.filters.location) {
         ordersRequest = ordersRequest.eq("location_name", query.filters.location);
       }
-      if (query.filters.status) ordersRequest = ordersRequest.eq("status", query.filters.status);
+      if (query.filters.status) ordersRequest = ordersRequest.eq("status_group", query.filters.status);
+      if (query.filters.settlementStatus) {
+        ordersRequest = ordersRequest.eq("settlement_status", query.filters.settlementStatus);
+      }
       if (query.orderSearch.trim()) {
         ordersRequest = ordersRequest.ilike("search_text", `%${query.orderSearch.trim()}%`);
       }
@@ -148,9 +160,7 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
       };
 
       const [
-        kpiResult,
-        trendResult,
-        channelResult,
+        summaryResult,
         orderResult,
         orderTotalsResult,
         inventoryResult,
@@ -158,24 +168,20 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
         locationOptionResult,
         orderOptionResult,
       ] = await Promise.all([
-        supabase.rpc("dashboard_kpis", rpcParams),
-        supabase.rpc("dashboard_order_trend", rpcParams),
-        supabase.rpc("dashboard_channel_summary", rpcParams),
-        ordersRequest,
-        supabase.rpc("dashboard_order_totals", totalsParams),
-        inventoryRequest,
-        locationRequest,
-        supabase.from("dashboard_locations").select("location_name").order("location_name"),
+        supabase.rpc("dashboard_operational_summary", rpcParams).abortSignal(abortController.signal),
+        ordersRequest.abortSignal(abortController.signal),
+        supabase.rpc("dashboard_order_totals_v2", totalsParams).abortSignal(abortController.signal),
+        inventoryRequest.abortSignal(abortController.signal),
+        locationRequest.abortSignal(abortController.signal),
+        supabase.from("dashboard_locations").select("location_name").order("location_name").abortSignal(abortController.signal),
         supabase
-          .from("dashboard_order_filter_options")
-          .select("marketplace,store_name,status")
-          .limit(5000),
+          .from("dashboard_order_filter_options_v2")
+          .select("marketplace,store_name,status_group,status_label,settlement_status,settlement_label,location_name")
+          .abortSignal(abortController.signal),
       ]);
 
       [
-        kpiResult,
-        trendResult,
-        channelResult,
+        summaryResult,
         orderResult,
         orderTotalsResult,
         inventoryResult,
@@ -201,14 +207,20 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
         ).values(),
       ).sort((a, b) => a.store.localeCompare(b.store));
       const statuses = Array.from(
-        new Set(optionRows.map((row) => row.status).filter(Boolean)),
+        new Set(optionRows.map((row) => row.status_group).filter(Boolean)),
       ).sort();
-      const locations = (locationOptionResult.data ?? [])
-        .map((row) => row.location_name)
-        .filter(Boolean)
-        .sort();
+      const statusLabels = Object.fromEntries(optionRows.filter((row) => row.status_group)
+        .map((row) => [row.status_group as string, row.status_label as string]));
+      const settlementStatuses = Array.from(new Set(optionRows.map((row) => row.settlement_status).filter(Boolean))).sort();
+      const settlementLabels = Object.fromEntries(optionRows.filter((row) => row.settlement_status)
+        .map((row) => [row.settlement_status as string, row.settlement_label as string]));
+      const locations = Array.from(new Set([
+        ...(locationOptionResult.data ?? []).map((row) => row.location_name),
+        ...optionRows.map((row) => row.location_name),
+      ].filter(Boolean) as string[])).sort();
 
-      const kpis = normalizeKpis(kpiResult.data?.[0]);
+      const operational = normalizeOperationalSummary(summaryResult.data);
+      const kpis = normalizeKpis(operational.kpis);
       const totals = orderTotalsResult.data?.[0] as
         | {
             order_count?: number | string;
@@ -220,15 +232,9 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
 
       const nextData: DashboardData = {
         kpis,
-        trend: normalizeNumberFields(
-          (trendResult.data ?? []) as TrendPoint[],
-          ["order_count", "order_value", "completed_revenue", "revenue"],
-        ),
-        channels: normalizeNumberFields(
-          (channelResult.data ?? []) as ChannelPoint[],
-          ["order_count", "order_value", "completed_revenue", "revenue"],
-        ),
-        orders: normalizeNumberFields((orderResult.data ?? []) as OrderRow[], [
+        trend: operational.trend,
+        channels: operational.channels.map((row) => ({ ...row, completed_revenue: 0, revenue: row.order_value })) as ChannelPoint[],
+        orders: normalizeNumberFields((orderResult.data ?? []).map((row) => ({ ...row, status: row.raw_status })) as OrderRow[], [
           "order_id",
           "subtotal",
           "grand_total",
@@ -254,13 +260,15 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
           "out_of_stock_count",
           "low_stock_count",
         ]),
-        filterOptions: { marketplaces, stores, statuses, locations },
+        filterOptions: { marketplaces, stores, statuses, statusLabels, settlementStatuses, settlementLabels, locations },
+        operational,
       };
       setData((current) => dataAfterLoad(current, nextData, null));
       hasLoadedRef.current = true;
       setLastUpdated(new Date());
       return true;
     } catch (loadError) {
+      if (abortController.signal.aborted) return false;
       if (!isLatestRequest(requestId, requestRef.current)) return false;
       setData((current) => dataAfterLoad(current, null, loadError));
       setError(`Data belum dapat dimuat: ${errorMessage(loadError)}`);
@@ -281,6 +289,7 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
       return;
     }
     void load();
+    return () => abortRef.current?.abort();
   }, [enabled, load]);
 
   const refreshFromJubelio = useCallback(async (): Promise<boolean> => {

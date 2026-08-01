@@ -136,8 +136,8 @@ Deno.serve(async (request: Request) => {
     20,
   );
   const activePages = Math.min(
-    Math.max(Math.floor(toNumber(input?.active_pages) || 20), 1),
-    20,
+    Math.max(Math.floor(toNumber(input?.active_pages) || 250), 1),
+    250,
   );
   const detailLimit = Math.min(
     Math.max(Math.floor(toNumber(input?.detail_limit) || 30), 0),
@@ -255,9 +255,21 @@ Deno.serve(async (request: Request) => {
     const recentOrderIds: number[] = [];
     let ordersSaved = 0;
 
-    for (const stage of stages) {
+    const fetchedStages = await Promise.all(
+      stages.map(async (stage) => {
+        try {
+          return { stage, result: await readStage(token, stage) };
+        } catch (error) {
+          return { stage, error };
+        }
+      }),
+    );
+
+    for (const fetched of fetchedStages) {
+      const { stage } = fetched;
       try {
-        const result = await readStage(token, stage);
+        if ("error" in fetched) throw fetched.error;
+        const result = fetched.result;
         const syncedAt = new Date().toISOString();
         const orders = result.rows
           .filter((row) => toNumber(row.salesorder_id) > 0)
@@ -319,14 +331,31 @@ Deno.serve(async (request: Request) => {
     }
 
     const failedStages = stageResults.filter((stage) => "error" in stage);
+    const truncatedStages = stageResults.filter(
+      (stage) => "truncated" in stage && stage.truncated,
+    );
+    const stageIssues = stageResults
+      .filter((stage) => "error" in stage || ("truncated" in stage && stage.truncated))
+      .map((stage) => ({
+        stage: stage.stage,
+        error: "error" in stage ? stage.error : undefined,
+        pagesRead: "pagesRead" in stage ? stage.pagesRead : undefined,
+        totalCount: "totalCount" in stage ? stage.totalCount : undefined,
+        saved: stage.saved,
+        truncated: "truncated" in stage ? stage.truncated : undefined,
+      }));
     await db
       .from("sync_logs")
       .update({
         status: failedStages.length === stages.length ? "failed" : "success",
         records_processed: ordersSaved,
-        message:
-          `${ordersSaved} order, ${itemRowsSaved} item; ` +
-          `${failedStages.length} tahap gagal`,
+        message: JSON.stringify({
+          ordersSaved,
+          itemRowsSaved,
+          failedStages: failedStages.length,
+          truncatedStages: truncatedStages.length,
+          issues: stageIssues,
+        }),
         completed_at: new Date().toISOString(),
       })
       .eq("id", log.id);
@@ -338,6 +367,8 @@ Deno.serve(async (request: Request) => {
         ordersSaved,
         detailsSaved,
         itemRowsSaved,
+        paginationComplete: truncatedStages.length === 0,
+        failedStageCount: failedStages.length,
         stages: stageResults,
       },
       {

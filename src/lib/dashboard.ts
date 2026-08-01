@@ -1,4 +1,4 @@
-import type { DashboardFilters, Kpis } from "../types";
+import type { DashboardFilters, Kpis, OperationalSummary } from "../types";
 
 export const BUSINESS_TIME_ZONE = "Asia/Makassar";
 
@@ -27,6 +27,7 @@ export function defaultFilters(date = new Date()): DashboardFilters {
     store: "",
     location: "",
     status: "",
+    settlementStatus: "",
   };
 }
 
@@ -37,7 +38,74 @@ export function toRpcParams(filters: DashboardFilters) {
     p_marketplace: filters.marketplace || null,
     p_store: filters.store || null,
     p_location: filters.location || null,
-    p_status: filters.status || null,
+    p_status_group: filters.status || null,
+    p_settlement_status: filters.settlementStatus || null,
+  };
+}
+
+export const EMPTY_OPERATIONAL: OperationalSummary = {
+  range: { date_from: "", date_to: "", previous_from: "", previous_to: "", days: 0 },
+  kpis: {
+    order_count: 0, valid_order_count: 0, order_value: 0, new_order_count: 0,
+    processing_order_count: 0, ready_to_ship_count: 0, shipped_order_count: 0,
+    completed_order_count: 0, cancelled_order_count: 0, returned_order_count: 0,
+    unknown_order_count: 0, completed_revenue: 0, unfinished_value: 0,
+    settlement_data_count: 0, settled_order_count: 0, settled_value: 0,
+    unsettled_value: 0, average_order_value: 0, completion_rate: 0,
+    cancellation_rate: 0, pending_rate: 0, average_process_hours: null,
+    process_time_sample: 0, average_ship_hours: null, ship_time_sample: 0,
+    order_synced_at: null, last_order_at: null, inventory_rows: 0,
+    total_on_hand: 0, total_available: 0, total_allocated: 0,
+    low_stock_rows: 0, out_of_stock_rows: 0, location_count: 0,
+    inventory_synced_at: null, backfill_loaded: 0, backfill_total: 0,
+    backfill_completed: false, backfill_updated_at: null,
+  },
+  comparison: {
+    available: false, order_count: 0, order_value: 0, completed_order_count: 0,
+    cancelled_order_count: 0, new_order_count: 0, valid_order_count: 0,
+    settled_value: 0, settlement_available: false, completion_rate: null,
+    cancellation_rate: null,
+  },
+  trend: [], status_distribution: [], funnel: [], channels: [], warehouses: [],
+  attention: [],
+  quality: { status_reconciled: false, unknown_status_count: 0, missing_location_count: 0,
+    settlement_unavailable_count: 0, process_time_sample: 0, ship_time_sample: 0 },
+  sla: {},
+};
+
+const NUMBER_KEYS = new Set([
+  "order_count", "valid_order_count", "order_value", "new_order_count",
+  "processing_order_count", "ready_to_ship_count", "shipped_order_count",
+  "completed_order_count", "cancelled_order_count", "returned_order_count",
+  "unknown_order_count", "completed_revenue", "unfinished_value", "settlement_data_count",
+  "settled_order_count", "settled_value", "unsettled_value", "average_order_value",
+  "completion_rate", "cancellation_rate", "pending_rate", "average_process_hours",
+  "process_time_sample", "average_ship_hours", "ship_time_sample", "inventory_rows",
+  "total_on_hand", "total_available", "total_allocated", "low_stock_rows",
+  "out_of_stock_rows", "location_count", "backfill_loaded", "backfill_total",
+  "completed_count", "cancelled_count", "new_count", "shipped_count", "stage_order",
+  "grand_total", "waiting_hours", "days",
+]);
+
+function numericJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(numericJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    NUMBER_KEYS.has(key) && item !== null ? Number(item) : numericJson(item),
+  ]));
+}
+
+export function normalizeOperationalSummary(input: unknown): OperationalSummary {
+  if (!input || typeof input !== "object") return EMPTY_OPERATIONAL;
+  const normalized = numericJson(input) as Partial<OperationalSummary>;
+  return {
+    ...EMPTY_OPERATIONAL,
+    ...normalized,
+    range: { ...EMPTY_OPERATIONAL.range, ...normalized.range },
+    kpis: { ...EMPTY_OPERATIONAL.kpis, ...normalized.kpis },
+    comparison: { ...EMPTY_OPERATIONAL.comparison, ...normalized.comparison },
+    quality: { ...EMPTY_OPERATIONAL.quality, ...normalized.quality },
   };
 }
 
@@ -124,6 +192,15 @@ export function formatCompactNumber(value: number): string {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+}
+
+export function formatCompactCurrency(value: number): string {
+  return `Rp${formatCompactNumber(value)}`;
+}
+
+export function percentChange(current: number, previous: number, available = true): number | null {
+  if (!available || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
 }
 
 export function formatBusinessDate(value: string | null): string {

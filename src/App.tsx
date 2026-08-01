@@ -38,6 +38,7 @@ import {
 import { useAuth, type AuthController } from "./hooks/useAuth";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { ForecastView } from "./ForecastView";
+import { BusinessSummaryView } from "./BusinessSummaryView";
 import {
   buildCsv,
   businessDate,
@@ -241,12 +242,14 @@ function AuthScreen({ auth }: { auth: AuthController }) {
 
 type FilterBarProps = {
   filters: DashboardFilters;
+  appliedFilters: DashboardFilters;
   options: ReturnType<typeof useDashboardData>["data"]["filterOptions"];
   onChange: (key: keyof DashboardFilters, value: string) => void;
+  onApply: () => void;
   onReset: () => void;
 };
 
-function FilterBar({ filters, options, onChange, onReset }: FilterBarProps) {
+function FilterBar({ filters, appliedFilters, options, onChange, onApply, onReset }: FilterBarProps) {
   const stores = filters.marketplace
     ? options.stores.filter((row) => row.marketplace === filters.marketplace)
     : options.stores;
@@ -319,14 +322,32 @@ function FilterBar({ filters, options, onChange, onReset }: FilterBarProps) {
           <option value="">Semua status tersedia</option>
           {options.statuses.map((status) => (
             <option key={status} value={status}>
-              {status}
+              {options.statusLabels[status] || status}
             </option>
           ))}
         </select>
       </label>
+      <label>
+        Status pencairan
+        <select value={filters.settlementStatus} onChange={(event) => onChange("settlementStatus", event.target.value)}>
+          <option value="">Semua pencairan</option>
+          {options.settlementStatuses.map((status) => (
+            <option key={status} value={status}>{options.settlementLabels[status] || status}</option>
+          ))}
+        </select>
+      </label>
+      <button className="apply-filter-button" onClick={onApply} type="button">Terapkan</button>
       <button className="icon-text-button" onClick={onReset} type="button">
         <RotateCcw size={16} /> Reset
       </button>
+      <div className="active-filter-chips">
+        <span>{appliedFilters.dateFrom} s.d. {appliedFilters.dateTo}</span>
+        {appliedFilters.location && <span>Gudang: {appliedFilters.location}</span>}
+        {appliedFilters.marketplace && <span>Platform: {appliedFilters.marketplace}</span>}
+        {appliedFilters.store && <span>Toko: {appliedFilters.store}</span>}
+        {appliedFilters.status && <span>Status: {options.statusLabels[appliedFilters.status] || appliedFilters.status}</span>}
+        {appliedFilters.settlementStatus && <span>Pencairan: {options.settlementLabels[appliedFilters.settlementStatus] || appliedFilters.settlementStatus}</span>}
+      </div>
     </section>
   );
 }
@@ -368,9 +389,20 @@ function EmptyState({ title, body }: { title: string; body: string }) {
 
 function SummaryView({
   controller,
+  modern,
+  onOrders,
+  onInventory,
+  onLocation,
 }: {
   controller: ReturnType<typeof useDashboardData>;
+  modern?: boolean;
+  onOrders?: (status?: string, search?: string) => void;
+  onInventory?: (status?: string) => void;
+  onLocation?: (location: string) => void;
 }) {
+  if (modern && onOrders && onInventory && onLocation) {
+    return <BusinessSummaryView controller={controller} onOrders={onOrders} onInventory={onInventory} onLocation={onLocation} />;
+  }
   const { data } = controller;
   const coverage =
     data.kpis.backfill_total > 0
@@ -645,15 +677,28 @@ function OrderDetail({
         </button>
         <p className="eyebrow">DETAIL ORDER</p>
         <h2>{order.order_number || `Order ${order.order_id}`}</h2>
+        <div className="detail-copy-actions">
+          <button type="button" onClick={() => void navigator.clipboard.writeText(order.order_number || String(order.order_id))}>Salin nomor order</button>
+          {order.tracking_number && <button type="button" onClick={() => void navigator.clipboard.writeText(order.tracking_number!)}>Salin nomor resi</button>}
+        </div>
         <div className="detail-grid">
-          <div><span>Tanggal (WITA)</span><strong>{formatDateTime(order.order_date)}</strong></div>
-          <div><span>Status</span><strong>{order.status}</strong></div>
+          <div><span>Nomor invoice</span><strong>{order.invoice_number || "Belum tersedia"}</strong></div>
+          <div><span>Nomor resi</span><strong>{order.tracking_number || "Belum tersedia"}</strong></div>
+          <div><span>Tanggal order (WITA)</span><strong>{formatDateTime(order.order_date)}</strong></div>
+          <div><span>Tanggal diproses</span><strong>{formatDateTime(order.processed_at)}</strong></div>
+          <div><span>Tanggal dikirim</span><strong>{formatDateTime(order.shipped_at)}</strong></div>
+          <div><span>Tanggal selesai</span><strong>{formatDateTime(order.completed_at)}</strong></div>
+          <div><span>Tanggal pencairan</span><strong>{formatDateTime(order.settlement_at)}</strong></div>
+          <div><span>Status order</span><strong>{order.status_label} ({order.raw_status})</strong></div>
+          <div><span>Status pencairan</span><strong>{order.settlement_label}</strong></div>
           <div><span>Platform</span><strong>{order.marketplace}</strong></div>
           <div><span>Toko</span><strong>{order.store_name || "—"}</strong></div>
-          <div><span>Pelanggan</span><strong>{order.customer_name || "—"}</strong></div>
+          <div><span>Penerima</span><strong>{order.recipient_name || order.customer_name || "—"}</strong></div>
           <div><span>Gudang</span><strong>{order.location_name || "Tidak dikirim sumber"}</strong></div>
-          <div><span>Subtotal</span><strong>{formatCurrency(order.subtotal)}</strong></div>
+          <div><span>Ekspedisi</span><strong>{order.shipper || "Belum tersedia"}</strong></div>
+          <div><span>Biaya / potongan</span><strong>{order.fee_amount === null ? "Belum tersedia" : formatCurrency(order.fee_amount)}</strong></div>
           <div><span>Grand total</span><strong>{formatCurrency(order.grand_total)}</strong></div>
+          <div><span>Nilai pencairan</span><strong>{order.settlement_amount === null ? "Belum tersedia" : formatCurrency(order.settlement_amount)}</strong></div>
         </div>
         <h3>Item order</h3>
         {loading ? (
@@ -705,16 +750,26 @@ function OrdersView(props: OrdersViewProps) {
 
   function exportRows() {
     const csv = buildCsv(
-      ["Nomor", "Tanggal WITA", "Platform", "Toko", "Pelanggan", "Gudang", "Status", "Grand Total"],
+      ["Nomor", "Invoice", "Resi", "Tanggal WITA", "Diproses", "Dikirim", "Selesai", "Pencairan", "Platform", "Toko", "Penerima", "Gudang", "Ekspedisi", "Status Order", "Status Pencairan", "Grand Total", "Biaya", "Nilai Pencairan"],
       data.orders.map((order) => [
         order.order_number,
+        order.invoice_number,
+        order.tracking_number,
         formatDateTime(order.order_date),
+        formatDateTime(order.processed_at),
+        formatDateTime(order.shipped_at),
+        formatDateTime(order.completed_at),
+        formatDateTime(order.settlement_at),
         order.marketplace,
         order.store_name,
-        order.customer_name,
+        order.recipient_name || order.customer_name,
         order.location_name,
-        order.status,
+        order.shipper,
+        order.status_label,
+        order.settlement_label,
         order.grand_total,
+        order.fee_amount,
+        order.settlement_amount,
       ]),
     );
     downloadCsv(`jubelio-orders-${businessDate()}.csv`, csv);
@@ -778,7 +833,7 @@ function OrdersView(props: OrdersViewProps) {
                               : "processing"
                         }`}
                       >
-                        {order.status}
+                        {order.status_label}
                       </span>
                     </td>
                     <td className="number-cell">{formatCurrency(order.grand_total)}</td>
@@ -988,6 +1043,7 @@ const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description:
 function Dashboard({ auth }: { auth: AuthController }) {
   const [activeView, setActiveView] = useState<ViewName>("summary");
   const [filters, setFilters] = useState<DashboardFilters>(() => defaultFilters());
+  const [draftFilters, setDraftFilters] = useState<DashboardFilters>(() => defaultFilters());
   const [orderPage, setOrderPage] = useState(1);
   const [orderPageSize, setOrderPageSize] = useState(25);
   const [orderSort, setOrderSort] = useState<DataQuery["orderSort"]>("order_date");
@@ -1035,17 +1091,23 @@ function Dashboard({ auth }: { auth: AuthController }) {
   const controller = useDashboardData(query, Boolean(auth.user));
 
   function changeFilter(key: keyof DashboardFilters, value: string) {
-    setFilters((current) => {
+    setDraftFilters((current) => {
       const next = { ...current, [key]: value };
       if (key === "marketplace") next.store = "";
       return next;
     });
+  }
+
+  function applyFilters() {
+    setFilters(draftFilters);
     setOrderPage(1);
     setInventoryPage(1);
   }
 
   function resetFilters() {
-    setFilters(defaultFilters());
+    const defaults = defaultFilters();
+    setFilters(defaults);
+    setDraftFilters(defaults);
     setOrderSearchInput("");
     setInventorySearchInput("");
     setInventoryStatus("");
@@ -1072,7 +1134,22 @@ function Dashboard({ auth }: { auth: AuthController }) {
   }
 
   function openLocation(location: string) {
-    changeFilter("location", location);
+    setFilters((current) => ({ ...current, location }));
+    setDraftFilters((current) => ({ ...current, location }));
+    setActiveView("inventory");
+  }
+
+  function openOrders(status = "", search = "") {
+    setFilters((current) => ({ ...current, status }));
+    setDraftFilters((current) => ({ ...current, status }));
+    setOrderSearchInput(search);
+    setOrderPage(1);
+    setActiveView("orders");
+  }
+
+  function openInventory(status = "") {
+    setInventoryStatus(status);
+    setInventoryPage(1);
     setActiveView("inventory");
   }
 
@@ -1130,7 +1207,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
         </header>
 
         {activeView !== "forecast" && (
-          <FilterBar filters={filters} options={controller.data.filterOptions} onChange={changeFilter} onReset={resetFilters} />
+          <FilterBar filters={draftFilters} appliedFilters={filters} options={controller.data.filterOptions} onChange={changeFilter} onApply={applyFilters} onReset={resetFilters} />
         )}
 
         {(controller.error || controller.refreshError) && (
@@ -1145,7 +1222,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
           <div className="dashboard-loading"><LoaderCircle className="spin" size={30} /><strong>Memuat data nyata…</strong><p>KPI dan tabel sedang dihitung di Supabase.</p></div>
         ) : (
           <div className="view-content">
-            {activeView === "summary" && <SummaryView controller={controller} />}
+            {activeView === "summary" && <SummaryView controller={controller} modern onOrders={openOrders} onInventory={openInventory} onLocation={openLocation} />}
             {activeView === "orders" && (
               <OrdersView
                 controller={controller}

@@ -8,6 +8,7 @@ export type DashboardFilters = {
   store: string;
   location: string;
   status: string;
+  settlementStatus: string;
 };
 
 export type Kpis = {
@@ -64,6 +65,24 @@ export type OrderRow = {
   grand_total: number;
   location_name: string | null;
   synced_at: string | null;
+  invoice_number: string | null;
+  tracking_number: string | null;
+  created_at: string;
+  processed_at: string | null;
+  shipped_at: string | null;
+  completed_at: string | null;
+  settlement_at: string | null;
+  raw_status: string;
+  status_group: string;
+  status_label: string;
+  settlement_status: string;
+  settlement_label: string;
+  settlement_amount: number | null;
+  fee_amount: number | null;
+  location_id: number | null;
+  shipper: string | null;
+  recipient_name: string | null;
+  sync_stage: string;
 };
 
 export type OrderItem = {
@@ -108,7 +127,135 @@ export type FilterOptions = {
   marketplaces: string[];
   stores: { marketplace: string; store: string }[];
   statuses: string[];
+  statusLabels: Record<string, string>;
+  settlementStatuses: string[];
+  settlementLabels: Record<string, string>;
   locations: string[];
+};
+
+export type OperationalKpis = {
+  order_count: number;
+  valid_order_count: number;
+  order_value: number;
+  new_order_count: number;
+  processing_order_count: number;
+  ready_to_ship_count: number;
+  shipped_order_count: number;
+  completed_order_count: number;
+  cancelled_order_count: number;
+  returned_order_count: number;
+  unknown_order_count: number;
+  completed_revenue: number;
+  unfinished_value: number;
+  settlement_data_count: number;
+  settled_order_count: number;
+  settled_value: number;
+  unsettled_value: number;
+  average_order_value: number;
+  completion_rate: number;
+  cancellation_rate: number;
+  pending_rate: number;
+  average_process_hours: number | null;
+  process_time_sample: number;
+  average_ship_hours: number | null;
+  ship_time_sample: number;
+  order_synced_at: string | null;
+  last_order_at: string | null;
+  inventory_rows: number;
+  total_on_hand: number;
+  total_available: number;
+  total_allocated: number;
+  low_stock_rows: number;
+  out_of_stock_rows: number;
+  location_count: number;
+  inventory_synced_at: string | null;
+  backfill_loaded: number;
+  backfill_total: number;
+  backfill_completed: boolean;
+  backfill_updated_at: string | null;
+};
+
+export type OperationalComparison = {
+  available: boolean;
+  order_count: number;
+  order_value: number;
+  completed_order_count: number;
+  cancelled_order_count: number;
+  new_order_count: number;
+  valid_order_count: number;
+  settled_value: number;
+  settlement_available: boolean;
+  completion_rate: number | null;
+  cancellation_rate: number | null;
+};
+
+export type StatusDistribution = {
+  status_group: string;
+  status_label: string;
+  order_count: number;
+  order_value: number;
+};
+
+export type FunnelPoint = {
+  stage_order: number;
+  stage: string;
+  order_count: number;
+};
+
+export type ChannelPerformance = {
+  marketplace: string;
+  order_count: number;
+  order_value: number;
+  completed_count: number;
+  cancelled_count: number;
+  average_order_value: number;
+};
+
+export type WarehousePerformance = {
+  location_name: string;
+  order_count: number;
+  new_count: number;
+  shipped_count: number;
+  completed_count: number;
+  average_process_hours: number | null;
+};
+
+export type AttentionOrder = Pick<OrderRow,
+  "order_id" | "order_number" | "invoice_number" | "tracking_number" |
+  "order_date" | "created_at" | "raw_status" | "status_group" |
+  "status_label" | "settlement_status" | "settlement_label" |
+  "marketplace" | "store_name" | "location_name" | "shipper" | "grand_total"
+> & {
+  waiting_hours: number;
+  sla_status: "Normal" | "Perlu perhatian" | "Terlambat" | "Kritis";
+  attention_reason: string;
+};
+
+export type OperationalSummary = {
+  range: {
+    date_from: string;
+    date_to: string;
+    previous_from: string;
+    previous_to: string;
+    days: number;
+  };
+  kpis: OperationalKpis;
+  comparison: OperationalComparison;
+  trend: TrendPoint[];
+  status_distribution: StatusDistribution[];
+  funnel: FunnelPoint[];
+  channels: ChannelPerformance[];
+  warehouses: WarehousePerformance[];
+  attention: AttentionOrder[];
+  quality: {
+    status_reconciled: boolean;
+    unknown_status_count: number;
+    missing_location_count: number;
+    settlement_unavailable_count: number;
+    process_time_sample: number;
+    ship_time_sample: number;
+  };
+  sla: Record<string, number | string | boolean>;
 };
 
 export type DataQuery = {
@@ -139,6 +286,7 @@ export type DashboardData = {
   inventoryCount: number;
   locations: LocationRow[];
   filterOptions: FilterOptions;
+  operational: OperationalSummary;
 };
 
 export type ForecastPeriod = "1_month" | "2_months" | "3_months" | "custom";
