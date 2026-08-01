@@ -173,7 +173,7 @@ Deno.serve(async (request: Request) => {
     const stateWrite = await db.from("sync_state").upsert(
       {
         sync_type: syncType,
-        next_page: completed ? 0 : offset,
+        next_page: completed ? 1 : Math.max(offset, 1),
         total_count: totalCount,
         completed,
         updated_at: new Date().toISOString(),
