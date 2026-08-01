@@ -1606,6 +1606,12 @@ tbody tr:hover {
   line-height: 1.5;
 }
 
+.danger-banner {
+  border-color: #f0b4aa;
+  background: #fff4f1;
+  color: #8f2f20;
+}
+
 .forecast-stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

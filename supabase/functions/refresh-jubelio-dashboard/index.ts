@@ -67,13 +67,15 @@ Deno.serve(async (request: Request) => {
     readJson(inventoryResponse),
   ]);
   const ok = ordersResponse.ok && inventoryResponse.ok && orders?.ok !== false && inventory?.ok !== false;
+  const partial = Boolean(orders?.partial) || (!ok && (ordersResponse.ok || inventoryResponse.ok));
 
   return Response.json(
     {
       ok,
+      partial,
       message: ok
         ? "Order terbaru dan persediaan berhasil disinkronkan dari Jubelio"
-        : "Sebagian sinkronisasi gagal. Data lama tetap tersedia.",
+        : "Sinkronisasi hanya selesai sebagian. Data lama tetap tersedia dan angka belum dianggap final.",
       orders,
       inventory,
     },

@@ -115,7 +115,12 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
       if (query.filters.location) {
         ordersRequest = ordersRequest.eq("location_name", query.filters.location);
       }
-      if (query.filters.status) ordersRequest = ordersRequest.eq("status_group", query.filters.status);
+      if (query.filters.status) {
+        const statuses = query.filters.status.split(",").map((status) => status.trim()).filter(Boolean);
+        ordersRequest = statuses.length > 1
+          ? ordersRequest.in("status_group", statuses)
+          : ordersRequest.eq("status_group", statuses[0]);
+      }
       if (query.filters.settlementStatus) {
         ordersRequest = ordersRequest.eq("settlement_status", query.filters.settlementStatus);
       }
@@ -304,7 +309,7 @@ export function useDashboardData(query: DataQuery, enabled: boolean): DashboardC
       );
       if (invokeError) throw invokeError;
       if (!result?.ok) {
-        throw new Error(result?.error ?? "Jubelio belum berhasil disinkronkan.");
+        throw new Error(result?.message ?? result?.error ?? "Jubelio belum berhasil disinkronkan.");
       }
       return await load();
     } catch (refreshFailure) {

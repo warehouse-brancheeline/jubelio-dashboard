@@ -202,6 +202,8 @@ export function normalizeForecast(input: unknown): ForecastData {
       orders_with_items: Number(coverage.orders_with_items ?? 0),
       coverage_percentage: Number(coverage.coverage_percentage ?? 0),
       location: coverage.location ?? null,
+      usable: Boolean(coverage.usable),
+      status: coverage.status === "LAYAK" ? "LAYAK" : "BELUM_LAYAK",
     },
     assumptions: {
       completed_statuses: assumptions.completed_statuses ?? [],

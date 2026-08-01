@@ -17,6 +17,18 @@ const pageSize = 200;
 const toNumber = (value: unknown) =>
   Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error) {
+    const value = error as Record<string, unknown>;
+    return [value.message, value.details, value.hint, value.code]
+      .filter(Boolean)
+      .map(String)
+      .join(" | ") || JSON.stringify(value);
+  }
+  return String(error);
+}
+
 function normalizeStatus(row: Row, fallback: string) {
   const raw = row.internal_status ?? row.action ?? row.channel_status ?? fallback;
   return String(raw || fallback).trim().replaceAll(" ", "_").toUpperCase();
@@ -355,10 +367,12 @@ Deno.serve(async (request: Request) => {
         truncated: undefined,
       });
     }
+    const partial = failedStages.length > 0 || truncatedStages.length > 0 || Boolean(factsRefresh.error);
+    const totalFailure = failedStages.length === stages.length;
     await db
       .from("sync_logs")
       .update({
-        status: failedStages.length === stages.length ? "failed" : "success",
+        status: totalFailure ? "failed" : partial ? "partial" : "success",
         records_processed: ordersSaved,
         message: JSON.stringify({
           ordersSaved,
@@ -373,8 +387,11 @@ Deno.serve(async (request: Request) => {
 
     return Response.json(
       {
-        ok: failedStages.length < stages.length,
-        message: "Sinkronisasi seluruh status order selesai",
+        ok: !partial,
+        partial,
+        message: partial
+          ? "Sinkronisasi order selesai sebagian"
+          : "Sinkronisasi seluruh status order selesai",
         ordersSaved,
         detailsSaved,
         itemRowsSaved,
@@ -383,12 +400,12 @@ Deno.serve(async (request: Request) => {
         stages: stageResults,
       },
       {
-        status: failedStages.length < stages.length ? 200 : 502,
+        status: totalFailure ? 502 : partial ? 207 : 200,
         headers: responseHeaders,
       },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Kesalahan tidak diketahui";
+    const message = errorText(error);
     await db
       .from("sync_logs")
       .update({ status: "failed", message, completed_at: new Date().toISOString() })

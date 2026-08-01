@@ -254,6 +254,15 @@ export type OperationalSummary = {
     settlement_unavailable_count: number;
     process_time_sample: number;
     ship_time_sample: number;
+    sync_health?: {
+      raw_count: number;
+      cache_count: number;
+      missing_from_cache: number;
+      raw_synced_at: string | null;
+      cache_synced_at: string | null;
+      lag_minutes: number | null;
+      stale: boolean;
+    };
   };
   sla: Record<string, number | string | boolean>;
 };
@@ -328,6 +337,8 @@ export type ForecastCoverage = {
   orders_with_items: number;
   coverage_percentage: number;
   location: string | null;
+  usable: boolean;
+  status: "LAYAK" | "BELUM_LAYAK";
 };
 
 export type ForecastAssumptions = {

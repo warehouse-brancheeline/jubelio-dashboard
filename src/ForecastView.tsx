@@ -254,7 +254,7 @@ export function ForecastView({ enabled, locations }: Props) {
     1,
     Math.ceil(data.summary.product_count / Math.max(applied.pageSize, 1)),
   );
-  const coverageLow = data.coverage.completed_orders > 0 && data.coverage.coverage_percentage < 80;
+  const coverageLow = data.coverage.completed_orders > 0 && !data.coverage.usable;
 
   return (
     <>
@@ -266,6 +266,16 @@ export function ForecastView({ enabled, locations }: Props) {
         </div>
         <Calculator size={34} />
       </section>
+
+      {coverageLow && (
+        <div className="coverage-banner danger-banner" role="alert">
+          <AlertTriangle size={21} />
+          <div>
+            <strong>Forecast belum layak dijadikan dasar pembelian</strong>
+            <p>Detail item baru mencakup {formatDecimal(data.coverage.coverage_percentage, 1)}% order selesai. Rekomendasi di bawah masih bersifat sementara sampai cakupan minimal 90%.</p>
+          </div>
+        </div>
+      )}
 
       <section className="forecast-controls panel">
         <div className="forecast-control-heading">
@@ -300,16 +310,6 @@ export function ForecastView({ enabled, locations }: Props) {
 
       {forecast.error && <div className="error-banner"><AlertTriangle size={19} /><span>{forecast.error}</span><button onClick={() => void forecast.reload()}>Coba lagi</button></div>}
 
-      {coverageLow && (
-        <div className="coverage-warning">
-          <AlertTriangle size={21} />
-          <div>
-            <strong>Histori detail item masih belum lengkap</strong>
-            <p>Baru {formatNumber(data.coverage.orders_with_items)} dari {formatNumber(data.coverage.completed_orders)} order selesai ({formatDecimal(data.coverage.coverage_percentage)}%) yang memiliki item. Rekomendasi tetap dihitung, tetapi confidence diturunkan sampai backfill selesai.</p>
-          </div>
-        </div>
-      )}
-
       <section className="forecast-stat-grid">
         <article><span>Produk dianalisis</span><strong>{formatNumber(data.summary.product_count)}</strong><small>{data.coverage.analysis_days || 0} hari kalender</small></article>
         <article className="critical"><span>Prioritas kritis</span><strong>{formatNumber(data.summary.critical_count)}</strong><small>Berisiko habis sebelum barang tiba</small></article>
@@ -328,7 +328,7 @@ export function ForecastView({ enabled, locations }: Props) {
             <option>Kritis</option><option>Tinggi</option><option>Sedang</option><option>Rendah</option><option>Tidak perlu restock</option>
           </select>
           <button className="secondary-button" onClick={apply}>Terapkan</button>
-          <button className="secondary-button" onClick={exportRows} disabled={!sortedRows.length}><Download size={17} /> Ekspor CSV</button>
+          <button className="secondary-button" onClick={exportRows} disabled={!sortedRows.length || coverageLow} title={coverageLow ? "Ekspor rekomendasi dinonaktifkan sampai coverage mencapai 90%" : "Ekspor forecast"}><Download size={17} /> Ekspor CSV</button>
         </div>
         {forecast.loading ? (
           <div className="forecast-loading"><LoaderCircle className="spin" size={28} /><strong>Menghitung forecast...</strong></div>
@@ -380,7 +380,7 @@ export function ForecastView({ enabled, locations }: Props) {
                     <td className="number-cell">{formatDecimal(row.reorder_point)}</td>
                     <td className="number-cell">{formatDecimal(row.demand_30_days)}</td>
                     <td>{row.estimated_stockout_date ? formatBusinessDate(row.estimated_stockout_date) : <span className="muted">Tidak dapat dihitung</span>}</td>
-                    <td className="number-cell"><strong>{formatDecimal(row.recommended_restock)}</strong><small className="table-subline">Aktual {formatDecimal(row.actual_restock)}</small></td>
+                    <td className="number-cell"><strong>{formatDecimal(row.recommended_restock)}</strong><small className="table-subline">{coverageLow ? "Sementara" : `Aktual ${formatDecimal(row.actual_restock)}`}</small></td>
                     <td><span className={`forecast-pill ${priorityClass(row.priority)}`}>{row.priority}</span></td>
                     <td><span className={`confidence-pill ${confidenceClass(row.confidence_level)}`}>{row.confidence_level}</span></td>
                     <td className="reason-cell">{row.recommendation_reason}</td>

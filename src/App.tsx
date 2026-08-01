@@ -38,7 +38,7 @@ import {
 import { useAuth, type AuthController } from "./hooks/useAuth";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { ForecastView } from "./ForecastView";
-import { BusinessSummaryView } from "./BusinessSummaryView";
+import { BusinessSummaryView, type OrderSelection } from "./BusinessSummaryView";
 import {
   buildCsv,
   businessDate,
@@ -320,6 +320,9 @@ function FilterBar({ filters, appliedFilters, options, onChange, onApply, onRese
         Status order
         <select value={filters.status} onChange={(event) => onChange("status", event.target.value)}>
           <option value="">Semua status tersedia</option>
+          {filters.status.includes(",") && (
+            <option value={filters.status}>{filters.status.split(",").map((status) => options.statusLabels[status] || status).join(" + ")}</option>
+          )}
           {options.statuses.map((status) => (
             <option key={status} value={status}>
               {options.statusLabels[status] || status}
@@ -392,16 +395,14 @@ function SummaryView({
   modern,
   onOrders,
   onInventory,
-  onLocation,
 }: {
   controller: ReturnType<typeof useDashboardData>;
   modern?: boolean;
-  onOrders?: (status?: string, search?: string) => void;
+  onOrders?: (selection?: OrderSelection) => void;
   onInventory?: (status?: string) => void;
-  onLocation?: (location: string) => void;
 }) {
-  if (modern && onOrders && onInventory && onLocation) {
-    return <BusinessSummaryView controller={controller} onOrders={onOrders} onInventory={onInventory} onLocation={onLocation} />;
+  if (modern && onOrders && onInventory) {
+    return <BusinessSummaryView controller={controller} onOrders={onOrders} onInventory={onInventory} />;
   }
   const { data } = controller;
   const coverage =
@@ -1139,10 +1140,16 @@ function Dashboard({ auth }: { auth: AuthController }) {
     setActiveView("inventory");
   }
 
-  function openOrders(status = "", search = "") {
-    setFilters((current) => ({ ...current, status }));
-    setDraftFilters((current) => ({ ...current, status }));
-    setOrderSearchInput(search);
+  function openOrders(selection: OrderSelection = {}) {
+    const selected = {
+      status: selection.statuses?.join(",") ?? "",
+      marketplace: selection.marketplace ?? "",
+      location: selection.location ?? "",
+      settlementStatus: selection.settlementStatus ?? "",
+    };
+    setFilters((current) => ({ ...current, ...selected, store: selection.marketplace ? "" : current.store }));
+    setDraftFilters((current) => ({ ...current, ...selected, store: selection.marketplace ? "" : current.store }));
+    setOrderSearchInput(selection.search ?? "");
     setOrderPage(1);
     setActiveView("orders");
   }
@@ -1222,7 +1229,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
           <div className="dashboard-loading"><LoaderCircle className="spin" size={30} /><strong>Memuat data nyata…</strong><p>KPI dan tabel sedang dihitung di Supabase.</p></div>
         ) : (
           <div className="view-content">
-            {activeView === "summary" && <SummaryView controller={controller} modern onOrders={openOrders} onInventory={openInventory} onLocation={openLocation} />}
+            {activeView === "summary" && <SummaryView controller={controller} modern onOrders={openOrders} onInventory={openInventory} />}
             {activeView === "orders" && (
               <OrdersView
                 controller={controller}

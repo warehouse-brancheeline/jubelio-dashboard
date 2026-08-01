@@ -29,13 +29,13 @@ Deno.serve(async (request: Request) => {
   const action = String(body?.action ?? "orders");
   const functionName =
     action === "dashboard"
-      ? "sync-jubelio-orders"
+      ? "refresh-jubelio-dashboard"
       : action === "forecast_items"
         ? "sync-jubelio-forecast-items"
         : "sync-jubelio-orders-backfill";
   const payload =
     action === "dashboard"
-      ? { pages: 5, active_pages: 250, detail_limit: 30 }
+      ? {}
       : action === "forecast_items"
         ? { months: 3, batch_size: 80 }
         : { pages: 10 };

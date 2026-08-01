@@ -8,6 +8,18 @@ const syncType = "forecast_order_items_backfill";
 const toNumber = (value: unknown) =>
   Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+function errorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error) {
+    const value = error as Record<string, unknown>;
+    return [value.message, value.details, value.hint, value.code]
+      .filter(Boolean)
+      .map(String)
+      .join(" | ") || JSON.stringify(value);
+  }
+  return String(error);
+}
+
 function itemRows(orderId: number, detail: Row) {
   const items = Array.isArray(detail.items) ? (detail.items as Row[]) : [];
   return items
@@ -196,7 +208,7 @@ Deno.serve(async (request: Request) => {
       { headers },
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorMessage = errorText(error);
     await db
       .from("sync_logs")
       .update({ status: "failed", message: errorMessage, completed_at: new Date().toISOString() })
