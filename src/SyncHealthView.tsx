@@ -178,6 +178,11 @@ export function SyncHealthView({ enabled, onRefreshFromJubelio, refreshing }: Pr
       <section className="forecast-stat-grid">
         {knownSources.map((source) => {
           const log = latestBySource.get(source);
+          const state = stateByType.get(source);
+          // Backfill workers stop writing to sync_logs once sync_state.completed
+          // is true (they short-circuit before logging), so a finished backfill
+          // can look "never synced" if its last log fell out of the recent window.
+          const finishedBackfillWithNoRecentLog = !log && state?.completed;
           return (
             <article key={source} className={log?.status === "failed" ? "critical" : log?.status === "partial" ? "high" : undefined}>
               <span>{sourceLabel(source)}</span>
@@ -185,6 +190,11 @@ export function SyncHealthView({ enabled, onRefreshFromJubelio, refreshing }: Pr
                 <>
                   <span className={`status-pill ${statusClass(log.status)}`}>{statusLabel(log.status)}</span>
                   <small>Terakhir: {formatDateTime(log.started_at)}</small>
+                </>
+              ) : finishedBackfillWithNoRecentLog ? (
+                <>
+                  <span className="status-pill status-success">Selesai</span>
+                  <small>Rampung: {formatDateTime(state.updated_at)}</small>
                 </>
               ) : (
                 <span className="muted">Belum pernah sinkron</span>
