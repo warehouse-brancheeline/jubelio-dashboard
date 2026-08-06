@@ -8,6 +8,15 @@ const syncType = "forecast_order_items_backfill";
 const toNumber = (value: unknown) =>
   Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+// Same conflict key appearing twice in one upsert() call makes Postgres
+// reject the whole batch ("ON CONFLICT DO UPDATE command cannot affect row
+// a second time"). Keep the last occurrence per key before every upsert.
+function dedupeByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) byKey.set(keyOf(row), row);
+  return [...byKey.values()];
+}
+
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error) {
@@ -152,7 +161,10 @@ Deno.serve(async (request: Request) => {
           failedOrders++;
           continue;
         }
-        const rows = itemRows(result.orderId, result.detail);
+        const rows = dedupeByKey(
+          itemRows(result.orderId, result.detail),
+          (item) => `${item.order_id}:${item.item_id}:${item.sku}`,
+        );
         if (!rows.length) {
           failedOrders++;
           continue;

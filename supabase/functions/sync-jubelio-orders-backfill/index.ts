@@ -5,6 +5,15 @@ type Row = Record<string, unknown>;
 const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 const toNumber = (value: unknown) => Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+// Same conflict key appearing twice in one upsert() call makes Postgres
+// reject the whole batch ("ON CONFLICT DO UPDATE command cannot affect row
+// a second time"). Keep the last occurrence per key before every upsert.
+function dedupeByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) byKey.set(keyOf(row), row);
+  return [...byKey.values()];
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return Response.json({ ok: false, error: "Method not allowed" }, { status: 405, headers });
   const email = Deno.env.get("JUBELIO_EMAIL");
@@ -59,9 +68,10 @@ Deno.serve(async (request: Request) => {
         raw_data: null,
         synced_at: syncedAt,
       }));
-      const write = await db.from("orders").upsert(orders, { onConflict: "order_id" });
+      const dedupedOrders = dedupeByKey(orders, (order) => String(order.order_id));
+      const write = await db.from("orders").upsert(dedupedOrders, { onConflict: "order_id" });
       if (write.error) throw new Error(`Order halaman ${page} gagal disimpan: ${write.error.message}`);
-      saved += orders.length;
+      saved += dedupedOrders.length;
       if (rows.length < pageSize || page * pageSize >= totalCount) { completed = true; break; }
     }
 

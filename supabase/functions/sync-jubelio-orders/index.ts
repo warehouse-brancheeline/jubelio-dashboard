@@ -17,6 +17,18 @@ const pageSize = 200;
 const toNumber = (value: unknown) =>
   Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+// Paginated Jubelio endpoints can return the same row on more than one page
+// when records shift during the fetch (concurrent writes on their side).
+// A single upsert() call containing the same conflict key twice is rejected
+// outright by Postgres ("ON CONFLICT DO UPDATE command cannot affect row a
+// second time"), which discards the whole batch, not just the duplicate.
+// Keep the last occurrence per key before every batched upsert.
+function dedupeByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) byKey.set(keyOf(row), row);
+  return [...byKey.values()];
+}
+
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "object" && error) {
@@ -283,9 +295,12 @@ Deno.serve(async (request: Request) => {
         if ("error" in fetched) throw fetched.error;
         const result = fetched.result;
         const syncedAt = new Date().toISOString();
-        const orders = result.rows
-          .filter((row) => toNumber(row.salesorder_id) > 0)
-          .map((row) => orderRow(row, stage.fallbackStatus, syncedAt));
+        const orders = dedupeByKey(
+          result.rows
+            .filter((row) => toNumber(row.salesorder_id) > 0)
+            .map((row) => orderRow(row, stage.fallbackStatus, syncedAt)),
+          (order) => String(order.order_id),
+        );
         if (orders.length) {
           const write = await db.from("orders").upsert(orders, { onConflict: "order_id" });
           if (write.error) throw new Error(write.error.message);
@@ -333,7 +348,10 @@ Deno.serve(async (request: Request) => {
           .upsert(orderRow(detail, "UNKNOWN", syncedAt), { onConflict: "order_id" });
         if (orderWrite.error) continue;
         detailsSaved++;
-        const items = itemRows(orderId, detail);
+        const items = dedupeByKey(
+          itemRows(orderId, detail),
+          (item) => `${item.order_id}:${item.item_id}:${item.sku}`,
+        );
         if (!items.length) continue;
         const itemWrite = await db
           .from("order_items")

@@ -8,6 +8,15 @@ const allowedOrigins = new Set([productionOrigin, "http://localhost:5173"]);
 const toNumber = (value: unknown) =>
   Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+// Same conflict key appearing twice in one upsert() call makes Postgres
+// reject the whole batch ("ON CONFLICT DO UPDATE command cannot affect row
+// a second time"). Keep the last occurrence per key before every upsert.
+function dedupeByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) byKey.set(keyOf(row), row);
+  return [...byKey.values()];
+}
+
 function corsHeaders(request: Request) {
   const origin = request.headers.get("origin") ?? productionOrigin;
   return {
@@ -125,7 +134,10 @@ Deno.serve(async (request: Request) => {
       .upsert(orderFromDetail(detail, syncedAt), { onConflict: "order_id" });
     if (orderWrite.error) throw new Error(`Order gagal disimpan: ${orderWrite.error.message}`);
 
-    const items = itemRows(orderId, detail);
+    const items = dedupeByKey(
+      itemRows(orderId, detail),
+      (item) => `${item.order_id}:${item.item_id}:${item.sku}`,
+    );
     if (items.length) {
       const deleteExisting = await db.from("order_items").delete().eq("order_id", orderId);
       if (deleteExisting.error) {

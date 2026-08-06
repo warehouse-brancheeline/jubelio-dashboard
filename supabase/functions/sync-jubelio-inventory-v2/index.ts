@@ -5,6 +5,15 @@ type Row = Record<string, unknown>;
 const responseHeaders = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 const toNumber = (value: unknown) => Number.isFinite(Number(value ?? 0)) ? Number(value ?? 0) : 0;
 
+// Same conflict key appearing twice in one upsert() call makes Postgres
+// reject the whole batch ("ON CONFLICT DO UPDATE command cannot affect row
+// a second time"). Keep the last occurrence per key before every upsert.
+function dedupeByKey<T>(rows: T[], keyOf: (row: T) => string): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of rows) byKey.set(keyOf(row), row);
+  return [...byKey.values()];
+}
+
 async function getJubelio(path: string, token: string) {
   const response = await fetch(`https://api2.jubelio.com${path}`, { headers: { authorization: token, Accept: "application/json" } });
   if (!response.ok) throw new Error(`Jubelio ${path} gagal (${response.status})`);
@@ -41,8 +50,14 @@ Deno.serve(async (request: Request) => {
       const items: Row[] = Array.isArray(itemsResult?.data) ? itemsResult.data as Row[] : Array.isArray(itemsResult) ? itemsResult as Row[] : [];
       if (!items.length) continue;
       const syncedAt = new Date().toISOString();
-      const products = items.filter((x) => toNumber(x.item_id) > 0).map((x) => ({ item_id: toNumber(x.item_id), sku: x.item_code ? String(x.item_code) : null, name: String(x.item_name ?? x.item_full_name ?? "Produk tanpa nama"), brand: x.brand_name ? String(x.brand_name) : null, category: null, raw_data: x, synced_at: syncedAt }));
-      const inventory = items.filter((x) => toNumber(x.item_id) > 0).map((x) => ({ item_id: toNumber(x.item_id), location_id: locationId, location_name: String(location.location_name ?? location.name ?? `Lokasi ${locationId}`), quantity: toNumber(x.end_qty), available_quantity: toNumber(x.available_qty), raw_data: x, synced_at: syncedAt }));
+      const products = dedupeByKey(
+        items.filter((x) => toNumber(x.item_id) > 0).map((x) => ({ item_id: toNumber(x.item_id), sku: x.item_code ? String(x.item_code) : null, name: String(x.item_name ?? x.item_full_name ?? "Produk tanpa nama"), brand: x.brand_name ? String(x.brand_name) : null, category: null, raw_data: x, synced_at: syncedAt })),
+        (product) => String(product.item_id),
+      );
+      const inventory = dedupeByKey(
+        items.filter((x) => toNumber(x.item_id) > 0).map((x) => ({ item_id: toNumber(x.item_id), location_id: locationId, location_name: String(location.location_name ?? location.name ?? `Lokasi ${locationId}`), quantity: toNumber(x.end_qty), available_quantity: toNumber(x.available_qty), raw_data: x, synced_at: syncedAt })),
+        (row) => `${row.item_id}:${row.location_id}`,
+      );
       const productWrite = await db.from("products").upsert(products, { onConflict: "item_id" });
       if (productWrite.error) throw new Error(`Produk gagal disimpan: ${productWrite.error.message}`);
       const stockWrite = await db.from("inventory").upsert(inventory, { onConflict: "item_id,location_id" });
