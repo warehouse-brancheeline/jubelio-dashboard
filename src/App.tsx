@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  Archive,
   ArrowDownUp,
   Boxes,
   CalendarDays,
@@ -40,6 +41,7 @@ import { useAuth, type AuthController } from "./hooks/useAuth";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { ForecastView } from "./ForecastView";
 import { SyncHealthView } from "./SyncHealthView";
+import { DeadStockView } from "./DeadStockView";
 import { BusinessSummaryView, type OrderSelection } from "./BusinessSummaryView";
 import {
   buildCsv,
@@ -1013,6 +1015,7 @@ const NAV_ITEMS: { id: ViewName; label: string; icon: React.ReactNode }[] = [
   { id: "inventory", label: "Persediaan", icon: <Boxes size={20} /> },
   { id: "forecast", label: "Forecast Restock", icon: <TrendingUp size={20} /> },
   { id: "locations", label: "Lokasi", icon: <Warehouse size={20} /> },
+  { id: "deadstock", label: "Produk Tidak Bergerak", icon: <Archive size={20} /> },
   { id: "sync", label: "Kesehatan Sinkron", icon: <Activity size={20} /> },
 ];
 
@@ -1046,6 +1049,11 @@ const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description:
     eyebrow: "OPERASIONAL SINKRONISASI",
     title: "Kesehatan sinkronisasi",
     description: "Waktu sinkron terakhir, status jujur, dan progres backfill per sumber data.",
+  },
+  deadstock: {
+    eyebrow: "PERSEDIAAN",
+    title: "Produk tidak bergerak",
+    description: "Stok yang tidak terjual melebihi ambang batas hari yang Anda tentukan.",
   },
 };
 
@@ -1221,7 +1229,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
           </div>
         </header>
 
-        {activeView !== "forecast" && activeView !== "sync" && (
+        {activeView !== "forecast" && activeView !== "sync" && activeView !== "deadstock" && (
           <FilterBar filters={draftFilters} appliedFilters={filters} options={controller.data.filterOptions} onChange={changeFilter} onApply={applyFilters} onReset={resetFilters} />
         )}
 
@@ -1287,6 +1295,12 @@ function Dashboard({ auth }: { auth: AuthController }) {
                 enabled={Boolean(auth.user)}
                 onRefreshFromJubelio={controller.refreshFromJubelio}
                 refreshing={controller.refreshing}
+              />
+            )}
+            {activeView === "deadstock" && (
+              <DeadStockView
+                enabled={Boolean(auth.user)}
+                locations={controller.data.filterOptions.locations}
               />
             )}
           </div>

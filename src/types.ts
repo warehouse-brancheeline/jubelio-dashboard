@@ -1,4 +1,4 @@
-export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations" | "sync";
+export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations" | "sync" | "deadstock";
 export type SortDirection = "asc" | "desc";
 
 export type DashboardFilters = {
@@ -425,4 +425,35 @@ export type SyncStateRow = {
   total_count: number;
   completed: boolean;
   updated_at: string;
+};
+
+export type DeadStockRow = {
+  item_id: number;
+  sku: string;
+  product_name: string;
+  stock_available: number;
+  stock_synced_at: string | null;
+  last_sale_date: string | null;
+  days_since_last_sale: number | null;
+  units_last_90_days: number;
+};
+
+export type DeadStockSummary = {
+  product_count: number;
+  stock_units: number;
+  never_sold_count: number;
+  threshold_days: number;
+};
+
+export type DeadStockData = {
+  summary: DeadStockSummary;
+  rows: DeadStockRow[];
+};
+
+export type DeadStockParameters = {
+  thresholdDays: number;
+  location: string;
+  page: number;
+  pageSize: number;
+  search: string;
 };
