@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   AlertCircle,
   ArrowDownUp,
   Boxes,
@@ -38,6 +39,7 @@ import {
 import { useAuth, type AuthController } from "./hooks/useAuth";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { ForecastView } from "./ForecastView";
+import { SyncHealthView } from "./SyncHealthView";
 import { BusinessSummaryView, type OrderSelection } from "./BusinessSummaryView";
 import {
   buildCsv,
@@ -1011,6 +1013,7 @@ const NAV_ITEMS: { id: ViewName; label: string; icon: React.ReactNode }[] = [
   { id: "inventory", label: "Persediaan", icon: <Boxes size={20} /> },
   { id: "forecast", label: "Forecast Restock", icon: <TrendingUp size={20} /> },
   { id: "locations", label: "Lokasi", icon: <Warehouse size={20} /> },
+  { id: "sync", label: "Kesehatan Sinkron", icon: <Activity size={20} /> },
 ];
 
 const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description: string }> = {
@@ -1038,6 +1041,11 @@ const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description:
     eyebrow: "JARINGAN GUDANG",
     title: "Lokasi",
     description: "Ringkasan stok nyata untuk setiap lokasi Jubelio.",
+  },
+  sync: {
+    eyebrow: "OPERASIONAL SINKRONISASI",
+    title: "Kesehatan sinkronisasi",
+    description: "Waktu sinkron terakhir, status jujur, dan progres backfill per sumber data.",
   },
 };
 
@@ -1213,7 +1221,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
           </div>
         </header>
 
-        {activeView !== "forecast" && (
+        {activeView !== "forecast" && activeView !== "sync" && (
           <FilterBar filters={draftFilters} appliedFilters={filters} options={controller.data.filterOptions} onChange={changeFilter} onApply={applyFilters} onReset={resetFilters} />
         )}
 
@@ -1274,6 +1282,13 @@ function Dashboard({ auth }: { auth: AuthController }) {
               />
             )}
             {activeView === "locations" && <LocationsView controller={controller} onOpen={openLocation} />}
+            {activeView === "sync" && (
+              <SyncHealthView
+                enabled={Boolean(auth.user)}
+                onRefreshFromJubelio={controller.refreshFromJubelio}
+                refreshing={controller.refreshing}
+              />
+            )}
           </div>
         )}
       </main>

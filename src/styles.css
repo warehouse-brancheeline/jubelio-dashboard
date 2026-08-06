@@ -1074,6 +1074,30 @@ tbody tr:hover {
   background: var(--danger-soft);
 }
 
+.status-pill.status-success {
+  color: var(--green-700);
+  background: #e6f5ed;
+}
+
+.status-pill.status-partial {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.status-pill.status-failed {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.status-pill.status-running {
+  color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.forecast-stat-grid .status-pill {
+  font-size: 0.72rem;
+}
+
 .row-action {
   width: 35px;
   height: 35px;

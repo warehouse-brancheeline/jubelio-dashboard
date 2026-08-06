@@ -1,4 +1,4 @@
-export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations";
+export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations" | "sync";
 export type SortDirection = "asc" | "desc";
 
 export type DashboardFilters = {
@@ -407,4 +407,22 @@ export type ForecastProductSettings = {
   moq: number | null;
   safety_stock: number | null;
   incoming_quantity: number | null;
+};
+
+export type SyncLogRow = {
+  id: number;
+  sync_type: string;
+  status: string;
+  message: string | null;
+  records_processed: number;
+  started_at: string;
+  completed_at: string | null;
+};
+
+export type SyncStateRow = {
+  sync_type: string;
+  next_page: number;
+  total_count: number;
+  completed: boolean;
+  updated_at: string;
 };
