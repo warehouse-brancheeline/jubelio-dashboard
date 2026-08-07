@@ -31,6 +31,7 @@ import {
   downloadCsv,
   formatBusinessDate,
   formatNumber,
+  retentionCutoffDate,
 } from "./lib/dashboard";
 import type {
   ForecastParameters,
@@ -295,7 +296,7 @@ export function ForecastView({ enabled, locations }: Props) {
           ))}
         </div>
         <div className="forecast-filter-grid">
-          <label>Tanggal mulai<input type="date" value={draft.dateFrom} max={draft.dateTo} onChange={(event) => setField("dateFrom", event.target.value)} disabled={draft.period !== "custom"} /></label>
+          <label>Tanggal mulai<input type="date" value={draft.dateFrom} min={retentionCutoffDate()} max={draft.dateTo} onChange={(event) => setField("dateFrom", event.target.value)} disabled={draft.period !== "custom"} /></label>
           <label>Tanggal akhir<input type="date" value={draft.dateTo} min={draft.dateFrom} onChange={(event) => setField("dateTo", event.target.value)} disabled={draft.period !== "custom"} /></label>
           <label>Gudang<select value={draft.location} onChange={(event) => setField("location", event.target.value)}><option value="">Semua gudang</option>{locations.map((location) => <option key={location}>{location}</option>)}</select></label>
           <label>Lead time default<input type="number" min="1" value={draft.defaultLeadTimeDays} onChange={(event) => setField("defaultLeadTimeDays", numberOr(event.target.value, 14))} /></label>

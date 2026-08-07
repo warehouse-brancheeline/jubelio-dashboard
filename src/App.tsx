@@ -53,6 +53,7 @@ import {
   formatCurrency,
   formatDateTime,
   formatNumber,
+  retentionCutoffDate,
   stockStatusLabel,
 } from "./lib/dashboard";
 import type {
@@ -267,6 +268,7 @@ function FilterBar({ filters, appliedFilters, options, onChange, onApply, onRese
           <input
             type="date"
             value={filters.dateFrom}
+            min={retentionCutoffDate()}
             max={filters.dateTo}
             onChange={(event) => onChange("dateFrom", event.target.value)}
           />

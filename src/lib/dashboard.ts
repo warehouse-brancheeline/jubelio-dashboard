@@ -19,6 +19,18 @@ export function dateDaysAgo(days: number, date = new Date()): string {
   return businessDate(copy);
 }
 
+// Order history older than this is pruned from the live tables (kept as
+// daily aggregates only) to stay within the free-tier database limit.
+// Filters cannot select a date before this, so the dashboard never shows a
+// misleading empty/zero result for a range whose detail no longer exists.
+export const ORDER_RETENTION_MONTHS = 6;
+
+export function retentionCutoffDate(date = new Date()): string {
+  const copy = new Date(date);
+  copy.setUTCMonth(copy.getUTCMonth() - ORDER_RETENTION_MONTHS);
+  return businessDate(copy);
+}
+
 export function defaultFilters(date = new Date()): DashboardFilters {
   return {
     dateFrom: dateDaysAgo(29, date),
