@@ -1842,3 +1842,30 @@ tbody tr:hover {
     width: 100%;
   }
 }
+.printed-shipments-view { display: grid; gap: 20px; }
+.print-toolbar { display: flex; align-items: end; gap: 16px; padding: 18px 20px; }
+.print-toolbar > div:first-child { display: flex; align-items: center; gap: 12px; margin-right: auto; color: var(--green-700); }
+.print-toolbar > div:first-child div { display: grid; gap: 3px; }
+.print-toolbar > div:first-child span { color: var(--muted); font-size: 13px; }
+.print-toolbar label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.print-toolbar input, .print-courier-panel select { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; background: white; padding: 0 12px; color: var(--ink); }
+.print-kpi-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+.print-kpi-grid article { display: grid; gap: 8px; min-height: 156px; padding: 20px; border: 1px solid var(--line); border-radius: 18px; background: white; box-shadow: var(--shadow); }
+.print-kpi-grid small { color: var(--muted); font-weight: 700; }
+.print-kpi-grid strong { font-size: clamp(28px,3vw,40px); line-height: 1; }
+.print-kpi-grid p { margin: 0; color: var(--muted); font-size: 13px; }
+.print-kpi-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; }
+.print-kpi-icon.green { color: #087653; background: #ddf4e9; }.print-kpi-icon.blue { color: #176ca5; background: #e1f0fb; }.print-kpi-icon.amber { color: #9a6100; background: #fff0cc; }.print-kpi-icon.red { color: #b94432; background: #fde8e4; }
+.print-source-note { display: flex; gap: 10px; align-items: flex-start; padding: 13px 16px; border: 1px solid #d9e8e1; border-radius: 13px; background: #f3faf7; color: #365f51; font-size: 13px; }
+.print-source-note svg { flex: 0 0 auto; margin-top: 1px; }
+.print-layout { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(0,.95fr); gap: 18px; }
+.print-chart-panel,.print-courier-panel,.print-detail-panel { padding: 20px; }
+.print-chart { height: 400px; margin-top: 12px; }
+.print-courier-panel select { min-height: 36px; }
+.print-empty { display: grid; place-items: center; gap: 7px; min-height: 220px; color: var(--muted); text-align: center; }
+.print-detail-panel .panel-meta { display: inline-flex; align-items: center; gap: 6px; }
+.mono-cell { font-family: ui-monospace,SFMono-Regular,Consolas,monospace; font-size: 12px; }
+.print-count { display: inline-flex; min-width: 34px; justify-content: center; padding: 5px 8px; border-radius: 999px; background: #e3f5ec; color: #087653; font-weight: 800; }
+.print-count.reprint { background: #fff0cc; color: #8b5900; }
+@media (max-width: 1050px) { .print-kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.print-layout { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .print-toolbar { align-items: stretch; flex-direction: column; }.print-kpi-grid { grid-template-columns: 1fr 1fr; }.print-kpi-grid article { min-height: 140px; padding: 16px; }.print-chart { height: 340px; } }

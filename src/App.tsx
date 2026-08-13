@@ -18,6 +18,7 @@ import {
   LogOut,
   Mail,
   PackageCheck,
+  Printer,
   RefreshCw,
   RotateCcw,
   Search,
@@ -43,6 +44,7 @@ import { ForecastView } from "./ForecastView";
 import { SyncHealthView } from "./SyncHealthView";
 import { DeadStockView } from "./DeadStockView";
 import { BusinessSummaryView, type OrderSelection } from "./BusinessSummaryView";
+import { PrintedShipmentsView } from "./PrintedShipmentsView";
 import {
   buildCsv,
   businessDate,
@@ -1014,6 +1016,7 @@ function LocationsView({
 const NAV_ITEMS: { id: ViewName; label: string; icon: React.ReactNode }[] = [
   { id: "summary", label: "Ringkasan", icon: <LayoutDashboard size={20} /> },
   { id: "orders", label: "Order", icon: <ShoppingBag size={20} /> },
+  { id: "printed_shipments", label: "Print Resi", icon: <Printer size={20} /> },
   { id: "inventory", label: "Persediaan", icon: <Boxes size={20} /> },
   { id: "forecast", label: "Forecast Restock", icon: <TrendingUp size={20} /> },
   { id: "locations", label: "Lokasi", icon: <Warehouse size={20} /> },
@@ -1031,6 +1034,11 @@ const VIEW_COPY: Record<ViewName, { eyebrow: string; title: string; description:
     eyebrow: "TRANSAKSI",
     title: "Order",
     description: "Telusuri dan audit order Jubelio yang sudah tersinkron.",
+  },
+  printed_shipments: {
+    eyebrow: "FULFILLMENT HARIAN",
+    title: "Print Resi",
+    description: "Jumlah resi yang diproses per ekspedisi berdasarkan waktu AWB Jubelio.",
   },
   inventory: {
     eyebrow: "PERSEDIAAN",
@@ -1231,7 +1239,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
           </div>
         </header>
 
-        {activeView !== "forecast" && activeView !== "sync" && activeView !== "deadstock" && (
+        {activeView !== "forecast" && activeView !== "sync" && activeView !== "deadstock" && activeView !== "printed_shipments" && (
           <FilterBar filters={draftFilters} appliedFilters={filters} options={controller.data.filterOptions} onChange={changeFilter} onApply={applyFilters} onReset={resetFilters} />
         )}
 
@@ -1265,6 +1273,7 @@ function Dashboard({ auth }: { auth: AuthController }) {
                 onSort={toggleOrderSort}
               />
             )}
+            {activeView === "printed_shipments" && <PrintedShipmentsView />}
             {activeView === "inventory" && (
               <InventoryView
                 controller={controller}

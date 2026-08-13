@@ -1,4 +1,43 @@
-export type ViewName = "summary" | "orders" | "inventory" | "forecast" | "locations" | "sync" | "deadstock";
+export type ViewName = "summary" | "orders" | "printed_shipments" | "inventory" | "forecast" | "locations" | "sync" | "deadstock";
+
+export type PrintedShipmentCourier = {
+  shipper: string;
+  resi_count: number;
+  order_count: number;
+  print_attempts: number;
+  reprint_count: number;
+  first_print_at: string | null;
+  last_print_at: string | null;
+};
+
+export type PrintedShipmentDetail = {
+  order_id: number;
+  order_number: string;
+  tracking_number: string;
+  shipper: string;
+  marketplace: string;
+  store_name: string;
+  location_name: string;
+  awb_created_at: string;
+  print_count: number;
+  status: string;
+};
+
+export type PrintedShipmentsData = {
+  business_date: string;
+  timezone: string;
+  source_basis: string;
+  summary: {
+    resi_count: number;
+    order_count: number;
+    courier_count: number;
+    print_attempts: number;
+    reprint_count: number;
+    latest_sync: string | null;
+  };
+  couriers: PrintedShipmentCourier[];
+  details: PrintedShipmentDetail[];
+};
 export type SortDirection = "asc" | "desc";
 
 export type DashboardFilters = {
